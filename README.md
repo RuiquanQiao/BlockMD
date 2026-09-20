@@ -74,6 +74,8 @@ Measured across 10 edit scenarios, blocks needing re-serialization:
 
 - Byte-identical open → save, verified on 22 hand-built fixtures and 14 real-world
   READMEs (~98 KB, 610 top-level blocks)
+- Desktop app (Tauri 2): open, save, save-as, `Ctrl+S`, drag a file onto the window,
+  launch from a file association, and a confirmation before unsaved work is discarded
 - Drag-to-reorder with zero re-serialization
 - Slash menu: paragraph, headings, lists, task list, quote, code block, divider
 - Link definitions (`[ref]: url`) and YAML front matter survive round trips even
@@ -82,7 +84,7 @@ Measured across 10 edit scenarios, blocks needing re-serialization:
 
 **Not yet**
 
-- Desktop shell (Tauri) — currently a browser app; saving downloads a file
+- Visual design — functional, but not yet the calm typographic feel it is aiming for
 - Side-by-side columns
 - Per-file encryption
 - Block references (see Non-goals)
@@ -102,10 +104,39 @@ Stated up front so expectations are calibrated:
 
 ## Getting started
 
+### Install it
+
 ```bash
 npm install
-npm run dev
+npm run desktop:build
 ```
+
+The installers land in `src-tauri/target/release/bundle/` — a 1.3 MB NSIS `-setup.exe`
+and a 1.8 MB `.msi` on Windows. For comparison, MarkText ships 128 MB and SiYuan 237 MB;
+the difference is Tauri reusing the system WebView instead of bundling Chromium.
+
+Installing puts BlockMD in the **Open with** list for `.md` and `.markdown`, and in
+Settings → Default apps. Windows will not let an installer *take* the default —
+`UserChoice` is hash-protected on purpose — so the last step is yours, once:
+
+> right-click any `.md` → **Open with** → **Choose another app** → **BlockMD** →
+> tick *Always use this app*
+
+To check what Windows actually offers for an extension — which is not the same
+question as "is the ProgId in the registry":
+
+```bash
+powershell -ExecutionPolicy Bypass -File scripts/check-assoc.ps1 .md
+```
+
+### Or run it from source
+
+```bash
+npm run desktop     # the Tauri app against a dev server
+npm run dev         # the same UI in a browser tab, where saving downloads instead
+```
+
+The desktop build needs a Rust toolchain; the browser one does not.
 
 Run the test suite:
 
@@ -126,6 +157,8 @@ src/
 app/
   editor/              Milkdown setup, drag handle, slash menu
   session.js           Translates editor state into a save plan
+  platform.js          The only module that differs between desktop and browser
+src-tauri/             Desktop shell: three byte-level file commands, nothing more
 ```
 
 Two invariants hold the design together:
@@ -147,6 +180,7 @@ Fidelity is a CI blocking check, not a nice-to-have.
 
 | Layer | Assertion |
 |---|---|
+| 0 | Reading a file preserves its BOM, and invalid UTF-8 is refused rather than decoded lossily |
 | 1 | `sha256(save(open(md))) === sha256(md)` |
 | 2 | Editing one block leaves every other byte untouched |
 | 3 | Edited blocks keep their original style (`-` stays `-`, `~~~` stays `~~~`) |

@@ -1,0 +1,83 @@
+name: Release
+
+# Publishing is tag-driven rather than push-driven: every commit on main would
+# otherwise produce installers nobody asked for, and a release people download has to
+# correspond to a version someone deliberately cut.
+#
+#   npm version patch && git push --follow-tags
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  installers:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: Windows (x64)
+            args: ''
+          - os: macos-latest
+            label: macOS (Apple silicon)
+            args: '--target aarch64-apple-darwin'
+          - os: macos-latest
+            label: macOS (Intel)
+            args: '--target x86_64-apple-darwin'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Disable git line-ending conversion
+        run: git config --global core.autocrlf false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      # The fidelity suite gates the release the same way it gates a merge: an
+      # installer that cannot open and re-save a file byte for byte is not shippable.
+      - name: Fetch real-world corpus
+        run: npm run corpus
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run tests
+        run: npm test
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: ${{ matrix.args }}
+          tagName: ${{ github.ref_name }}
+          releaseName: 'BlockMD ${{ github.ref_name }}'
+          # Written as a draft so the notes can be edited before anyone sees it.
+          releaseDraft: true
+          prerelease: false
+          releaseBody: |
+            Download the installer for your platform below.
+
+            **Windows** — run the `-setup.exe`. It registers BlockMD as a handler for
+            `.md` and `.markdown`. Windows will not let an installer take the default
+            file association, so to get double-click opening: right-click any `.md` →
+            Open with → Choose another app → BlockMD → *Always use this app*.
+
+            **macOS** — the build is unsigned, so the first launch needs
+            right-click → Open.

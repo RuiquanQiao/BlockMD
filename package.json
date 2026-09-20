@@ -29,6 +29,11 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "tauri": "tauri",
+    "desktop": "tauri dev",
+    "desktop:debug": "tauri dev --config \"{\\\"app\\\":{\\\"windows\\\":[{\\\"additionalBrowserArgs\\\":\\\"--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --remote-debugging-port=9222\\\"}]}}\"",
+    "desktop:build": "tauri build",
+    "check:handle": "node scripts/check-handle.mjs",
     "corpus": "node scripts/fetch-corpus.mjs",
     "test": "node --test \"test/*.test.js\"",
     "test:watch": "node --test --watch \"test/*.test.js\"",
@@ -37,7 +42,10 @@
     "test:ci": "node --test \"test/*.test.js\""
   },
   "dependencies": {
+    "@floating-ui/dom": "^1.8.0",
     "@milkdown/kit": "^7.22.1",
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-dialog": "^2.7.3",
     "mdast-util-from-markdown": "^2.0.2",
     "mdast-util-frontmatter": "^2.0.1",
     "mdast-util-gfm": "^3.1.0",
@@ -47,6 +55,7 @@
     "remark-frontmatter": "^5.0.0"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.11.5",
     "jsdom": "^29.1.1",
     "vite": "^8.3.0"
   }

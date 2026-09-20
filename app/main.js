@@ -5,10 +5,14 @@
  * central — and most easily broken — promise into something visible at all times.
  * With no edits it must read "byte-identical to disk". The moment a refactor breaks
  * open-then-save, whoever is working on it sees it immediately.
+ *
+ * File I/O lives in `platform.js`; this file never touches the filesystem directly,
+ * so the desktop and browser builds differ in exactly one module.
  */
 
 import { createEditor, editorViewCtx } from './editor/create-editor.js';
 import { DocumentSession } from './session.js';
+import * as platform from './platform.js';
 
 const DEMO = `# BlockMD demo
 
@@ -63,10 +67,36 @@ const el = {
 let session = null;
 let editor = null;
 let showSource = false;
+/** Absolute path on disk, or null for the demo / a browser tab. */
+let currentPath = null;
+/** Set while a transient message is showing, so refresh() does not overwrite it. */
+let flashTimer = null;
+
+/* --------------------------------------------------------------- status bar */
+
+function isDirty() {
+  const s = session?.status();
+  return Boolean(s?.ok && !s.identical);
+}
+
+function flash(message, kind = 'err') {
+  clearTimeout(flashTimer);
+  el.dot.className = 'dot ' + kind;
+  el.text.textContent = message;
+  el.text.title = '';
+  flashTimer = setTimeout(() => {
+    flashTimer = null;
+    refresh();
+  }, 4000);
+}
 
 function refresh() {
   if (!session) return;
   const s = session.status();
+
+  setWindowTitle();
+
+  if (flashTimer) return;
 
   if (!s.ok) {
     el.statusbar.classList.add('err');
@@ -95,11 +125,26 @@ function refresh() {
   }
 }
 
-async function load(source, name) {
+async function setWindowTitle() {
+  const mark = isDirty() ? ' •' : '';
+  const name = session?.name ?? 'BlockMD';
+  el.filename.textContent = name + mark;
+  el.filename.title = currentPath ?? '';
+  document.title = `${name}${mark} — BlockMD`;
+  if (platform.isDesktop) {
+    const { getCurrentWindow } = await import('@tauri-apps/api/window');
+    await getCurrentWindow().setTitle(`${name}${mark} — BlockMD`);
+  }
+}
+
+/* ------------------------------------------------------------------ loading */
+
+async function load(source, name, path = null) {
   if (editor) {
     await editor.destroy();
     el.editor.textContent = '';
   }
+  currentPath = path;
   session = new DocumentSession(source, name);
   el.filename.textContent = name;
 
@@ -114,12 +159,19 @@ async function load(source, name) {
     if (!gate.safe) console.warn('[BlockMD] ' + gate.message);
   });
 
-  // Development hook for inspecting the save plan and fidelity state from the console.
+  // Development hook for inspecting the save plan and fidelity state from the console,
+  // and for driving the app from outside — see scripts/cdp.mjs. Synthetic keystrokes
+  // sent with the Windows SendInput API do not reach WebView2's content, so end-to-end
+  // checks of the desktop build go through the debugging protocol instead.
   if (import.meta.env?.DEV) {
     window.__bmd = {
       get session() { return session; },
       get editor() { return editor; },
+      get path() { return currentPath; },
+      get dirty() { return isDirty(); },
       refresh,
+      save: saveFile,
+      open: openFile,
       /** Direct access to the ProseMirror view, for driving interactions by hand. */
       view() {
         let v = null;
@@ -132,6 +184,72 @@ async function load(source, name) {
   refresh();
 }
 
+/** Guarded load: refuses to throw away unsaved edits without asking. */
+async function loadGuarded(source, name, path) {
+  if (isDirty()) {
+    const ok = await platform.confirmDiscard(
+      `${session.name} has unsaved changes. Discard them?`,
+    );
+    if (!ok) return;
+  }
+  await load(source, name, path);
+}
+
+/* -------------------------------------------------------------- open / save */
+
+async function openFile() {
+  if (!platform.isDesktop) {
+    el.fileInput.click();
+    return;
+  }
+  try {
+    const path = await platform.pickOpenPath();
+    if (!path) return;
+    const text = await platform.readFile(path);
+    await loadGuarded(text, platform.basename(path), path);
+  } catch (err) {
+    flash(String(err.message ?? err));
+  }
+}
+
+async function saveFile({ saveAs = false } = {}) {
+  if (!session) return;
+
+  const s = session.status();
+  if (!s.ok) {
+    flash('Refusing to save: block mapping is unsafe. Reopen the file.');
+    return;
+  }
+
+  const out = session.save();
+
+  if (!platform.isDesktop) {
+    // A browser tab cannot write back to where the file came from.
+    platform.downloadText(session.name, out);
+    return;
+  }
+
+  try {
+    let path = currentPath;
+    if (!path || saveAs) {
+      path = await platform.pickSavePath(session.name);
+      if (!path) return;
+    }
+    await platform.writeFile(path, out);
+    currentPath = path;
+    session.name = platform.basename(path);
+    // Adopt what we just wrote as the new baseline, so the indicator goes back to
+    // "byte-identical to disk" and the next save reuses these bytes verbatim.
+    session.commit(out);
+    refresh();
+    flash(`Saved · ${out.length} bytes`, 'ok');
+  } catch (err) {
+    flash(`Save failed — ${String(err.message ?? err)}`);
+  }
+}
+
+/* ------------------------------------------------------------------- wiring */
+
 el.btnSource.addEventListener('click', () => {
   showSource = !showSource;
   el.btnSource.setAttribute('aria-pressed', String(showSource));
@@ -140,27 +258,64 @@ el.btnSource.addEventListener('click', () => {
   refresh();
 });
 
-el.btnOpen.addEventListener('click', () => el.fileInput.click());
+el.btnOpen.addEventListener('click', openFile);
+el.btnSave.addEventListener('click', () => saveFile());
 
 el.fileInput.addEventListener('change', async (e) => {
   const file = e.target.files?.[0];
-  if (!file) return;
-  const text = await file.text();
-  await load(text, file.name);
   e.target.value = '';
+  if (!file) return;
+  try {
+    const text = platform.decodeFile(new Uint8Array(await file.arrayBuffer()));
+    await loadGuarded(text, file.name, null);
+  } catch (err) {
+    flash(String(err.message ?? err));
+  }
 });
 
-el.btnSave.addEventListener('click', () => {
-  if (!session) return;
-  const out = session.save();
-  // Browser build downloads the file. Once wrapped in Tauri this becomes a write back
-  // to the original path — it is the only layer that has to change.
-  const blob = new Blob([out], { type: 'text/markdown;charset=utf-8' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = session.name;
-  a.click();
-  URL.revokeObjectURL(a.href);
+window.addEventListener('keydown', (e) => {
+  const mod = e.ctrlKey || e.metaKey;
+  if (!mod) return;
+  const key = e.key.toLowerCase();
+  if (key === 's') {
+    e.preventDefault();
+    saveFile({ saveAs: e.shiftKey });
+  } else if (key === 'o') {
+    e.preventDefault();
+    openFile();
+  }
 });
 
-load(DEMO, 'demo.md');
+platform.onFileDropped(({ path, name, text }) => loadGuarded(text, name, path));
+
+/** Desktop only: do not let the window close on top of unsaved edits. */
+async function guardWindowClose() {
+  if (!platform.isDesktop) return;
+  const { getCurrentWindow } = await import('@tauri-apps/api/window');
+  const win = getCurrentWindow();
+  await win.onCloseRequested(async (event) => {
+    if (!isDirty()) return;
+    event.preventDefault();
+    const ok = await platform.confirmDiscard(
+      `${session.name} has unsaved changes. Close without saving?`,
+    );
+    if (ok) await win.destroy();
+  });
+}
+
+/* --------------------------------------------------------------------- boot */
+
+(async () => {
+  let booted = false;
+  try {
+    const path = await platform.startupPath();
+    if (path) {
+      await load(await platform.readFile(path), platform.basename(path), path);
+      booted = true;
+    }
+  } catch (err) {
+    console.warn('[BlockMD] could not open launch file:', err);
+  }
+  if (!booted) await load(DEMO, 'demo.md');
+  guardWindowClose();
+})();
