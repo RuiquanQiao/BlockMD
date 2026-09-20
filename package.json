@@ -1,0 +1,53 @@
+{
+  "name": "blockmd",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A Notion-style block editor whose files are just plain .md",
+  "keywords": [
+    "markdown",
+    "editor",
+    "block-editor",
+    "wysiwyg",
+    "prosemirror",
+    "milkdown"
+  ],
+  "license": "MIT",
+  "author": "Ruiquan Qiao",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RuiquanQiao/BlockMD.git"
+  },
+  "bugs": {
+    "url": "https://github.com/RuiquanQiao/BlockMD/issues"
+  },
+  "homepage": "https://github.com/RuiquanQiao/BlockMD#readme",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "corpus": "node scripts/fetch-corpus.mjs",
+    "test": "node --test \"test/*.test.js\"",
+    "test:watch": "node --test --watch \"test/*.test.js\"",
+    "test:fidelity": "node --test test/fidelity.test.js",
+    "pretest:ci": "npm run corpus",
+    "test:ci": "node --test \"test/*.test.js\""
+  },
+  "dependencies": {
+    "@milkdown/kit": "^7.22.1",
+    "mdast-util-from-markdown": "^2.0.2",
+    "mdast-util-frontmatter": "^2.0.1",
+    "mdast-util-gfm": "^3.1.0",
+    "mdast-util-to-markdown": "^2.1.2",
+    "micromark-extension-frontmatter": "^2.0.0",
+    "micromark-extension-gfm": "^3.0.0",
+    "remark-frontmatter": "^5.0.0"
+  },
+  "devDependencies": {
+    "jsdom": "^29.1.1",
+    "vite": "^8.3.0"
+  }
+}

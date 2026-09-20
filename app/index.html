@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BlockMD</title>
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">BlockMD</div>
+    <div class="filename" id="filename">demo.md</div>
+    <div class="topbar-actions">
+      <button class="btn" id="btn-open" type="button">Open .md</button>
+      <button class="btn" id="btn-source" type="button" aria-pressed="false">Show source</button>
+      <button class="btn btn-primary" id="btn-save" type="button">Save</button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <div class="pane pane-editor">
+      <div id="editor" class="editor-host"></div>
+    </div>
+    <aside class="pane pane-source" id="source-pane" hidden>
+      <div class="source-head">
+        <span>What gets written to disk</span>
+        <span class="source-note" id="source-note"></span>
+      </div>
+      <pre class="source-body" id="source-body"></pre>
+    </aside>
+  </main>
+
+  <footer class="statusbar" id="statusbar">
+    <span class="dot" id="status-dot"></span>
+    <span id="status-text">Loading…</span>
+    <span class="spacer"></span>
+    <span class="stat" id="stat-blocks"></span>
+    <span class="stat" id="stat-hidden"></span>
+  </footer>
+
+  <input type="file" id="file-input" accept=".md,.markdown,.txt" hidden>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

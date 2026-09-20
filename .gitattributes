@@ -1,0 +1,5 @@
+# This project's core promise is byte fidelity, so git must not normalize line
+# endings on any file. If git rewrote LF to CRLF on checkout, the fidelity tests
+# would be validating a file git had already modified — they would still pass, and
+# the result would be meaningless.
+* -text

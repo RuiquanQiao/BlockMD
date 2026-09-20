@@ -1,0 +1,19 @@
+node_modules/
+dist/
+
+# Real-world corpus is fetched from upstream repos at test time (npm run corpus)
+test/corpus/
+
+# Local tooling / editor config
+.claude/
+.vscode/
+.idea/
+
+# Working notes and exploratory spikes — not part of the published project
+docs/
+research/
+spikes/
+
+.DS_Store
+Thumbs.db
+*.log
