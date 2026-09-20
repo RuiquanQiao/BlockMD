@@ -1,42 +1,70 @@
 /* BlockMD — application shell and block interaction styles.
-   Palette: cool grey archival paper with a verdigris accent. */
+
+   The palette and metrics below are Notion's own, not an impression of them:
+   text rgb(55,53,47), dividers and hovers as alpha values off that same ink,
+   accent rgb(35,131,226), body 16px/1.5, content column 708px. Matching the
+   numbers is what keeps it from reading as "sort of like Notion".
+
+   Two rules worth keeping when editing this file:
+     - Greys are alpha values of the ink colour, never separate hex greys. That is
+       why Notion's surfaces stay coherent over any background.
+     - Vertical rhythm comes from block padding (3px 2px) plus a 1px gap, not from
+       margins on every element. Blocks are things you drag; they need hit areas. */
 
 :root {
   color-scheme: light;
-  --paper: #e7ebee;
-  --surface: #fbfcfd;
-  --surface-2: #f1f4f7;
-  --ink: #151c24;
-  --ink-2: #47535f;
-  --ink-3: #7b8894;
-  --rule: #d3dae0;
-  --rule-soft: #e2e7eb;
-  --verdigris: #0f7a6a;
-  --verdigris-soft: #e3f0ed;
-  --brass: #8f6412;
-  --oxide: #a0372b;
-  --oxide-soft: #f7e7e4;
-  --font-ui: -apple-system, BlinkMacSystemFont, "PingFang SC", "HarmonyOS Sans SC",
-    "Microsoft YaHei", "Noto Sans SC", sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+
+  --bg: #fff;
+  --bg-sunken: #f7f6f3;          /* code blocks, front matter */
+  --ink: #37352f;
+  --ink-2: rgba(55, 53, 47, 0.65);
+  --ink-3: rgba(55, 53, 47, 0.45);
+  --rule: rgba(55, 53, 47, 0.09);
+  --rule-strong: rgba(55, 53, 47, 0.16);
+  --hover: rgba(55, 53, 47, 0.06);
+  --active: rgba(55, 53, 47, 0.08);
+
+  --accent: #2383e2;
+  --accent-soft: rgba(35, 131, 226, 0.12);
+  --select: rgba(35, 131, 226, 0.28);
+
+  --code-ink: #eb5757;
+  --code-bg: rgba(135, 131, 120, 0.15);
+  --warn: #cb912f;
+  --danger: #e03e3e;
+  --danger-soft: rgba(224, 62, 62, 0.08);
+
+  --font-ui: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text",
+    "Segoe UI", "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", "Noto Sans SC",
+    Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+  --column: 708px;               /* Notion's default page width */
+  --gutter: 96px;
+  /* The drag handle lives entirely in the left gutter: two 24px buttons, a 1px gap,
+     and HANDLE_GAP (8px) of clearance in block-handle.js. --gutter must never drop
+     below this, or the handle has nowhere to go but on top of the text. */
+  --handle-gutter: 60px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-    --paper: #0e1317;
-    --surface: #141a1f;
-    --surface-2: #1b2229;
-    --ink: #e8edf1;
-    --ink-2: #a9b6c1;
-    --ink-3: #78868f;
-    --rule: #27313a;
-    --rule-soft: #1f272e;
-    --verdigris: #2bae96;
-    --verdigris-soft: #122a27;
-    --brass: #c99a3a;
-    --oxide: #d9705f;
-    --oxide-soft: #2c1917;
+
+    --bg: #191919;
+    --bg-sunken: #252525;
+    --ink: rgba(255, 255, 255, 0.81);
+    --ink-2: rgba(255, 255, 255, 0.46);
+    --ink-3: rgba(255, 255, 255, 0.32);
+    --rule: rgba(255, 255, 255, 0.13);
+    --rule-strong: rgba(255, 255, 255, 0.2);
+    --hover: rgba(255, 255, 255, 0.055);
+    --active: rgba(255, 255, 255, 0.08);
+
+    --code-ink: #ff7369;
+    --warn: #dfab01;
+    --danger: #ff7369;
+    --danger-soft: rgba(255, 115, 105, 0.1);
   }
 }
 
@@ -45,122 +73,264 @@
 /* A component-level display value overrides the [hidden] default, so pin it here. */
 [hidden] { display: none !important; }
 
+::selection { background: var(--select); }
+
 body {
   margin: 0;
   height: 100vh;
   display: grid;
   grid-template-rows: auto 1fr auto;
-  background: var(--paper);
+  background: var(--bg);
   color: var(--ink);
   font-family: var(--font-ui);
   font-size: 16px;
-  line-height: 1.75;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* ——— Top bar ——— */
+/* ——— Top bar ———
+   No bottom border: the page should feel like one surface, with the status bar as
+   the only horizontal rule in the window. */
 .topbar {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 9px 18px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--rule);
+  gap: 8px;
+  height: 45px;
+  padding: 0 12px;
+  background: var(--bg);
+  user-select: none;
 }
-.brand { font-weight: 600; font-size: 14px; color: var(--verdigris); letter-spacing: -0.01em; }
-.filename { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink-3); }
-.topbar-actions { margin-left: auto; display: flex; gap: 8px; }
+.filename {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+  padding: 3px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.topbar-actions { margin-left: auto; display: flex; gap: 2px; align-items: center; }
 
 .btn {
   font: inherit;
-  font-size: 12.5px;
-  padding: 5px 12px;
-  border-radius: 6px;
-  border: 1px solid var(--rule);
-  background: var(--surface);
+  font-size: 14px;
+  line-height: 1.2;
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: 0;
+  background: transparent;
   color: var(--ink-2);
   cursor: pointer;
+  transition: background 20ms ease-in;
 }
-.btn:hover { border-color: var(--verdigris); color: var(--verdigris); }
-.btn[aria-pressed="true"] { background: var(--verdigris-soft); border-color: var(--verdigris); color: var(--verdigris); }
-.btn-primary { background: var(--verdigris); border-color: var(--verdigris); color: #fff; }
-.btn-primary:hover { filter: brightness(1.08); color: #fff; }
-:focus-visible { outline: 2px solid var(--verdigris); outline-offset: 2px; }
+.btn:hover { background: var(--hover); }
+.btn:active { background: var(--active); }
+.btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.btn-primary {
+  margin-left: 6px;
+  padding: 6px 12px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 500;
+}
+.btn-primary:hover { background: #1a7ad4; }
+.btn-primary:active { background: #1a7ad4; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* ——— Workspace ——— */
 .workspace { display: grid; grid-template-columns: 1fr; overflow: hidden; }
-.workspace.with-source { grid-template-columns: 1fr minmax(340px, 38%); }
+.workspace.with-source { grid-template-columns: 1fr minmax(320px, 36%); }
 .pane { overflow: auto; min-width: 0; }
-.pane-editor { padding: 40px 0 120px; }
-.editor-host { max-width: 780px; margin: 0 auto; padding: 0 56px; }
+/* Generous space above the first block, and enough below the last one that it can be
+   scrolled to the middle of the window rather than sticking to the bottom edge. */
+.pane-editor { padding: 40px 0 40vh; }
+.editor-host {
+  max-width: calc(var(--column) + var(--gutter) * 2);
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+}
+@media (max-width: 900px) {
+  /* Was 40px, which is narrower than the handle — the cause of the handle sitting on
+     top of list bullets at small window sizes. */
+  :root { --gutter: var(--handle-gutter); }
+}
 
 /* ——— Source pane ——— */
-.pane-source { background: var(--surface); border-left: 1px solid var(--rule); display: flex; flex-direction: column; }
+.pane-source {
+  background: var(--bg-sunken);
+  border-left: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+}
 .source-head {
   display: flex; align-items: baseline; gap: 10px;
-  padding: 10px 16px; border-bottom: 1px solid var(--rule);
-  font-size: 12px; color: var(--ink-2); position: sticky; top: 0; background: var(--surface);
+  padding: 12px 16px; border-bottom: 1px solid var(--rule);
+  font-size: 12px; font-weight: 500; color: var(--ink-2);
+  position: sticky; top: 0; background: var(--bg-sunken);
 }
-.source-note { color: var(--ink-3); font-family: var(--font-mono); font-size: 11.5px; margin-left: auto; }
+.source-note { color: var(--ink-3); font-weight: 400; margin-left: auto; }
 .source-body {
   margin: 0; padding: 14px 16px; flex: 1;
-  font-family: var(--font-mono); font-size: 12.5px; line-height: 1.7;
+  font-family: var(--font-mono); font-size: 12px; line-height: 1.7;
   color: var(--ink-2); white-space: pre-wrap; word-break: break-word;
 }
 
-/* ——— Status bar ——— */
+/* ——— Status bar ———
+   Deliberately quiet. It carries the project's central promise, so it must always
+   be readable, but it is not what the eye should land on first. */
 .statusbar {
-  display: flex; align-items: center; gap: 9px;
-  padding: 6px 18px; border-top: 1px solid var(--rule);
-  background: var(--surface); font-size: 12px; color: var(--ink-2);
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 14px;
+  border-top: 1px solid var(--rule);
+  background: var(--bg);
+  font-size: 12px; color: var(--ink-2);
+  user-select: none;
+  white-space: nowrap;          /* one line always: a wrapping status bar overlaps the editor */
 }
-.statusbar .spacer { margin-left: auto; }
-.statusbar .stat { font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-3); }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-3); flex: none; }
-.dot.ok { background: var(--verdigris); }
-.dot.edited { background: var(--brass); }
-.dot.err { background: var(--oxide); }
-.statusbar.err { background: var(--oxide-soft); color: var(--oxide); }
+.statusbar #status-text { overflow: hidden; text-overflow: ellipsis; }
+.statusbar .spacer { margin-left: auto; flex: 1 0 8px; }
+.statusbar .stat { color: var(--ink-3); flex: none; }
+/* Below this width the counts are the first thing to go; the fidelity state stays. */
+@media (max-width: 640px) {
+  .statusbar .stat { display: none; }
+}
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-3); flex: none; }
+.dot.ok { background: #0f9960; }
+.dot.edited { background: var(--warn); }
+.dot.err { background: var(--danger); }
+.statusbar.err { background: var(--danger-soft); color: var(--danger); }
 
 /* ——— Editor typography ——— */
 .milkdown { outline: none; }
 .milkdown .ProseMirror { outline: none; }
-.milkdown .ProseMirror > * { position: relative; }
+
+/* Every top-level node is a block: a hit area with its own padding, a 1px gap to the
+   next one, and a positioning context for the hover handle.
+
+   :where() is load-bearing, not decoration. Written as `.milkdown .ProseMirror > *`
+   this selector scores two classes and silently outranks every single-class element
+   rule below it — headings lost their top margin, lists their indent (bullets then
+   rendered outside the text column, underneath the drag handle), code blocks their
+   padding. :where() contributes nothing to specificity, so this reads as a genuine
+   default that the rules below are free to override. */
+:where(.milkdown .ProseMirror) > * {
+  position: relative;
+  margin: 1px 0;
+  padding: 3px 2px;
+}
+
 .milkdown h1, .milkdown h2, .milkdown h3,
 .milkdown h4, .milkdown h5, .milkdown h6 {
-  line-height: 1.35; letter-spacing: -0.015em; margin: 1.6em 0 0.5em; font-weight: 600;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--ink);
 }
-.milkdown h1 { font-size: 1.85em; }
-.milkdown h2 { font-size: 1.45em; }
-.milkdown h3 { font-size: 1.2em; }
-.milkdown p { margin: 0.75em 0; }
-.milkdown ul, .milkdown ol { padding-left: 1.5em; margin: 0.75em 0; }
-.milkdown li { margin: 0.25em 0; }
-.milkdown blockquote {
-  margin: 1em 0; padding: 0.1em 0 0.1em 1em;
-  border-left: 3px solid var(--verdigris); color: var(--ink-2);
-}
-.milkdown pre {
-  background: var(--surface); border: 1px solid var(--rule); border-radius: 8px;
-  padding: 14px 16px; overflow-x: auto; font-family: var(--font-mono); font-size: 13px;
-}
-.milkdown code { font-family: var(--font-mono); font-size: 0.88em; }
-.milkdown :not(pre) > code {
-  background: var(--surface-2); border: 1px solid var(--rule-soft);
-  border-radius: 4px; padding: 1px 5px;
-}
-.milkdown hr { border: 0; border-top: 1px solid var(--rule); margin: 1.8em 0; }
-.milkdown table { border-collapse: collapse; width: 100%; font-size: 0.92em; margin: 1em 0; }
-.milkdown th, .milkdown td { border: 1px solid var(--rule); padding: 7px 11px; text-align: left; }
-.milkdown th { background: var(--surface-2); font-weight: 600; }
-.milkdown a { color: var(--verdigris); text-underline-offset: 3px; }
-.milkdown img { max-width: 100%; }
+.milkdown h1 { font-size: 1.875em; margin-top: 2em; margin-bottom: 4px; }
+.milkdown h2 { font-size: 1.5em; margin-top: 1.4em; margin-bottom: 2px; }
+.milkdown h3 { font-size: 1.25em; margin-top: 1em; margin-bottom: 1px; }
+.milkdown h4 { font-size: 1.1em; margin-top: 1em; }
+/* The first block should not be pushed down by a heading's top margin. */
+.milkdown .ProseMirror > :first-child { margin-top: 0; }
 
-/* Front matter: visually distinct from prose, to read as metadata. */
+.milkdown p { margin: 1px 0; padding: 3px 2px; min-height: 1.5em; }
+
+.milkdown ul, .milkdown ol { padding-left: 1.7em; margin: 1px 0; }
+.milkdown li { margin: 1px 0; padding: 1px 2px; }
+.milkdown li::marker { color: var(--ink-2); }
+.milkdown li p { margin: 0; padding: 0; }
+.milkdown input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 16px; height: 16px;
+  margin-right: 6px;
+  vertical-align: -2px;
+  cursor: pointer;
+}
+
+.milkdown blockquote {
+  margin: 6px 0;
+  padding: 3px 0 3px 14px;
+  border-left: 3px solid currentColor;
+  font-size: 1em;
+}
+
+.milkdown pre {
+  background: var(--bg-sunken);
+  border-radius: 4px;
+  padding: 16px;
+  margin: 6px 0;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 85%;
+  line-height: 1.5;
+  tab-size: 2;
+}
+.milkdown pre code { color: var(--ink); background: none; padding: 0; font-size: inherit; }
+.milkdown :not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 85%;
+  color: var(--code-ink);
+  background: var(--code-bg);
+  border-radius: 3px;
+  padding: 0.2em 0.4em;
+}
+
+.milkdown hr {
+  border: 0;
+  border-top: 1px solid var(--rule-strong);
+  margin: 6px 0;
+  padding: 3px 0;
+}
+
+.milkdown table { border-collapse: collapse; font-size: 0.95em; margin: 6px 0; }
+.milkdown th, .milkdown td {
+  border: 1px solid var(--rule-strong);
+  padding: 7px 9px;
+  text-align: left;
+  vertical-align: top;
+}
+.milkdown th { background: var(--hover); font-weight: 500; }
+
+.milkdown a { color: inherit; text-decoration: underline; text-decoration-color: var(--ink-3); text-underline-offset: 3px; }
+.milkdown a:hover { text-decoration-color: var(--ink); }
+.milkdown img { max-width: 100%; border-radius: 3px; }
+.milkdown strong { font-weight: 600; }
+
+/* Footnotes. Milkdown renders a definition as <dl><dt>label</dt><dd>content</dd></dl>,
+   which without styling reads as a stray number above an indented paragraph. */
+.milkdown dl[data-type="footnote_definition"] {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0 8px;
+  margin: 4px 0;
+  font-size: 0.875em;
+  color: var(--ink-2);
+}
+.milkdown dl[data-type="footnote_definition"] dt {
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.milkdown dl[data-type="footnote_definition"] dt::before { content: "["; }
+.milkdown dl[data-type="footnote_definition"] dt::after { content: "]"; }
+.milkdown dl[data-type="footnote_definition"] dd { margin: 0; }
+.milkdown dl[data-type="footnote_definition"] dd > * { margin: 0; padding: 0; }
+.milkdown sup[data-type="footnote_reference"] {
+  color: var(--accent);
+  font-size: 0.7em;
+  padding: 0 1px;
+  cursor: default;
+}
+
+/* Front matter: reads as metadata about the page, not as part of the prose. */
 .milkdown div[data-bmd="frontmatter"] {
-  font-family: var(--font-mono); font-size: 12.5px; white-space: pre-wrap;
-  background: var(--surface-2); border: 1px dashed var(--rule);
-  border-radius: 8px; padding: 10px 14px; color: var(--ink-3); margin: 0 0 1.2em;
+  font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6;
+  white-space: pre-wrap;
+  background: var(--bg-sunken);
+  border-radius: 4px;
+  padding: 12px 14px;
+  color: var(--ink-2);
+  margin: 0 0 12px;
 }
 
 /* ——— Floating-layer contract ———
@@ -173,43 +343,63 @@ body {
 .bmd-handle:not([data-show='true']),
 .bmd-slash:not([data-show='true']) { display: none; }
 
+/* The handle stays invisible until handle-guard.js has checked its position against
+   the active block. data-show alone is not enough: the plugin sets it from an async
+   callback that may carry the previous block's coordinates. Reserving the layout box
+   (visibility, not display) keeps the measurement the guard needs meaningful. */
+.bmd-handle:not([data-valid='1']) { visibility: hidden; }
+
 /* ——— Drag handle ——— */
-.bmd-handle { display: flex; align-items: center; gap: 2px; }
+.bmd-handle { display: flex; align-items: center; gap: 1px; }
 .bmd-handle-btn {
   display: grid; place-items: center;
-  width: 22px; height: 24px; padding: 0;
-  border: 0; border-radius: 5px; background: transparent;
+  width: 24px; height: 24px; padding: 0;
+  border: 0; border-radius: 4px; background: transparent;
   color: var(--ink-3); cursor: pointer;
+  transition: background 20ms ease-in;
 }
-.bmd-handle-btn:hover { background: var(--surface-2); color: var(--ink); }
+.bmd-handle-btn:hover { background: var(--hover); color: var(--ink-2); }
 .bmd-handle-btn svg { width: 14px; height: 14px; }
 .bmd-handle-grip { cursor: grab; }
-.bmd-handle-grip:active { cursor: grabbing; }
+.bmd-handle-grip:active { cursor: grabbing; background: var(--active); }
 .bmd-handle-grip svg { fill: currentColor; width: 10px; height: 16px; }
 .bmd-handle-add svg { stroke: currentColor; }
 
 /* ——— Slash menu ——— */
 .bmd-slash {
-  width: 264px; max-height: 320px; overflow-y: auto;
+  width: 280px; max-height: 330px; overflow-y: auto;
   /* position is set by the floating-layer contract above */
-  background: var(--surface); border: 1px solid var(--rule);
-  border-radius: 10px; box-shadow: 0 8px 28px rgba(21, 28, 36, 0.14);
-  padding: 5px; z-index: 40;
+  background: var(--bg);
+  border-radius: 6px;
+  box-shadow:
+    rgba(15, 15, 15, 0.05) 0 0 0 1px,
+    rgba(15, 15, 15, 0.1) 0 3px 6px,
+    rgba(15, 15, 15, 0.2) 0 9px 24px;
+  padding: 6px 4px;
+  z-index: 40;
 }
 .bmd-slash-item {
   display: flex; align-items: baseline; gap: 10px; width: 100%;
-  font: inherit; font-size: 13.5px; text-align: left;
-  padding: 7px 10px; border: 0; border-radius: 7px;
+  font: inherit; font-size: 14px; text-align: left;
+  padding: 6px 10px; border: 0; border-radius: 4px;
   background: transparent; color: var(--ink); cursor: pointer;
 }
-.bmd-slash-item.is-active { background: var(--verdigris-soft); }
-.bmd-slash-label { font-weight: 500; }
+.bmd-slash-item.is-active { background: var(--hover); }
+.bmd-slash-label { font-weight: 400; }
 .bmd-slash-hint {
   margin-left: auto; font-family: var(--font-mono);
   font-size: 11.5px; color: var(--ink-3);
 }
-.bmd-slash-item.is-active .bmd-slash-hint { color: var(--verdigris); }
 .bmd-slash-empty { padding: 12px; font-size: 13px; color: var(--ink-3); text-align: center; }
+
+@media (prefers-color-scheme: dark) {
+  .bmd-slash {
+    box-shadow:
+      rgba(15, 15, 15, 0.1) 0 0 0 1px,
+      rgba(15, 15, 15, 0.2) 0 3px 6px,
+      rgba(15, 15, 15, 0.4) 0 9px 24px;
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
