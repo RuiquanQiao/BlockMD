@@ -20,6 +20,7 @@
     { "id": "image-local", "area": "Blocks", "feature": "Image next to the file (relative path)", "status": "must", "check": "render-image-local" },
     { "id": "image-web", "area": "Blocks", "feature": "Image from the web", "status": "must", "check": "render-image-web" },
     { "id": "equation-block", "area": "Blocks", "feature": "Block equation", "status": "must", "check": "render-math-block", "note": "`$$ … $$`, which GitHub renders" },
+    { "id": "equation-edit", "area": "Blocks", "feature": "Insert an equation from / and edit its TeX by clicking it", "status": "must", "check": "math-edit" },
     { "id": "toggle", "area": "Blocks", "feature": "Toggle list", "status": "planned", "note": "Storable as HTML `<details><summary>`, which GitHub renders; needs a new node type and remark config (iron rule 2)" },
     { "id": "columns", "area": "Blocks", "feature": "Columns (blocks side by side)", "status": "planned", "note": "ADR-004: v1 read-only atomic block, v2 custom schema" },
     { "id": "media-links", "area": "Blocks", "feature": "Video, audio, file, PDF, bookmark", "status": "planned", "note": "Markdown can only store these as links; a nicer rendering of such links is possible" },
@@ -50,6 +51,8 @@
     { "id": "md-quote", "area": "Markdown shortcuts", "feature": "\" then space makes a quote (> also, as in Markdown)", "status": "must", "check": "shortcut-quote", "note": "In Notion `>` makes a toggle; here `>` keeps its Markdown meaning" },
     { "id": "md-divider", "area": "Markdown shortcuts", "feature": "--- makes a divider", "status": "must", "check": "shortcut-divider" },
     { "id": "md-code-block", "area": "Markdown shortcuts", "feature": "``` makes a code block", "status": "must", "check": "shortcut-code-block" },
+
+    { "id": "md-math", "area": "Markdown shortcuts", "feature": "$…$ typed becomes an equation; $$ then space starts a block equation; \"$5 and $10\" stays text", "status": "must", "check": "shortcut-math" },
 
     { "id": "kb-bold", "area": "Keyboard", "feature": "Ctrl+B bold", "status": "must", "check": "key-bold" },
     { "id": "kb-italic", "area": "Keyboard", "feature": "Ctrl+I italic", "status": "must", "check": "key-italic" },

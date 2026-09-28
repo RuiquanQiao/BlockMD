@@ -623,3 +623,55 @@ body {
 .bmd-lang-menu { width: 220px; max-height: 300px; overflow-y: auto; padding: 6px 4px; z-index: 46; }
 .bmd-lang-menu .bmd-lang-search { margin: 0 0 4px; }
 .bmd-lang-menu .bmd-menu-item { display: block; width: 100%; text-align: left; }
+
+/* ——— Equations (editor/math.js) ——— */
+.milkdown .bmd-math { cursor: pointer; border-radius: 4px; }
+.milkdown .bmd-math:hover, .milkdown .ProseMirror-selectednode.bmd-math { background: var(--hover); }
+.milkdown .bmd-math-block { display: block; padding: 8px 4px; text-align: center; overflow-x: auto; }
+.milkdown .bmd-math-block .katex-display { margin: 0; }
+.milkdown .bmd-math-inline { padding: 0 2px; }
+.milkdown .bmd-math-empty { color: var(--ink-3); font-size: 14px; }
+.bmd-math-editor {
+  position: fixed; z-index: 45; width: 412px; padding: 8px;
+  background: var(--bg); border-radius: 6px;
+  box-shadow: rgba(15, 15, 15, 0.05) 0 0 0 1px, rgba(15, 15, 15, 0.1) 0 3px 6px, rgba(15, 15, 15, 0.2) 0 9px 24px;
+}
+.bmd-math-editor textarea {
+  display: block; width: 100%; resize: vertical;
+  font-family: var(--font-mono); font-size: 13px; padding: 6px 8px;
+  border: 1px solid var(--rule-strong); border-radius: 4px; background: var(--bg-sunken); color: var(--ink); outline: none;
+}
+.bmd-math-editor textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.bmd-math-preview { padding: 10px 4px 4px; min-height: 28px; overflow-x: auto; text-align: center; }
+.bmd-math-hint { font-size: 12px; color: var(--ink-3); padding-top: 4px; }
+
+/* ——— Code highlighting (editor/highlight.js): highlight.js classes, GitHub-like
+   colours that sit well on Notion's code background ——— */
+.milkdown pre .hljs-comment, .milkdown pre .hljs-quote { color: #6e7781; font-style: italic; }
+.milkdown pre .hljs-keyword, .milkdown pre .hljs-selector-tag, .milkdown pre .hljs-doctag,
+.milkdown pre .hljs-template-tag, .milkdown pre .hljs-meta .hljs-keyword { color: #cf222e; }
+.milkdown pre .hljs-string, .milkdown pre .hljs-regexp, .milkdown pre .hljs-meta .hljs-string,
+.milkdown pre .hljs-addition { color: #0a3069; }
+.milkdown pre .hljs-number, .milkdown pre .hljs-literal, .milkdown pre .hljs-attr, .milkdown pre .hljs-attribute,
+.milkdown pre .hljs-symbol, .milkdown pre .hljs-variable.constant_, .milkdown pre .hljs-selector-attr { color: #0550ae; }
+.milkdown pre .hljs-title, .milkdown pre .hljs-title.function_, .milkdown pre .hljs-section,
+.milkdown pre .hljs-selector-id, .milkdown pre .hljs-selector-class { color: #8250df; }
+.milkdown pre .hljs-built_in, .milkdown pre .hljs-type, .milkdown pre .hljs-title.class_,
+.milkdown pre .hljs-variable, .milkdown pre .hljs-params, .milkdown pre .hljs-name, .milkdown pre .hljs-tag { color: #953800; }
+.milkdown pre .hljs-meta, .milkdown pre .hljs-deletion { color: #82071e; }
+.milkdown pre .hljs-emphasis { font-style: italic; }
+.milkdown pre .hljs-strong { font-weight: 600; }
+@media (prefers-color-scheme: dark) {
+  .milkdown pre .hljs-comment, .milkdown pre .hljs-quote { color: #8b949e; }
+  .milkdown pre .hljs-keyword, .milkdown pre .hljs-selector-tag, .milkdown pre .hljs-doctag,
+  .milkdown pre .hljs-template-tag, .milkdown pre .hljs-meta .hljs-keyword { color: #ff7b72; }
+  .milkdown pre .hljs-string, .milkdown pre .hljs-regexp, .milkdown pre .hljs-meta .hljs-string,
+  .milkdown pre .hljs-addition { color: #a5d6ff; }
+  .milkdown pre .hljs-number, .milkdown pre .hljs-literal, .milkdown pre .hljs-attr, .milkdown pre .hljs-attribute,
+  .milkdown pre .hljs-symbol, .milkdown pre .hljs-variable.constant_, .milkdown pre .hljs-selector-attr { color: #79c0ff; }
+  .milkdown pre .hljs-title, .milkdown pre .hljs-title.function_, .milkdown pre .hljs-section,
+  .milkdown pre .hljs-selector-id, .milkdown pre .hljs-selector-class { color: #d2a8ff; }
+  .milkdown pre .hljs-built_in, .milkdown pre .hljs-type, .milkdown pre .hljs-title.class_,
+  .milkdown pre .hljs-variable, .milkdown pre .hljs-params, .milkdown pre .hljs-name, .milkdown pre .hljs-tag { color: #ffa657; }
+  .milkdown pre .hljs-meta, .milkdown pre .hljs-deletion { color: #ffa198; }
+}

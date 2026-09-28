@@ -33,6 +33,7 @@ export const MDAST_TO_PM = Object.freeze({
   thematicBreak: ['hr', 'horizontal_rule'],
   footnoteDefinition: ['footnote_definition'],
   yaml: ['frontmatter'],
+  math: ['math_block'],
   // Milkdown has no HTML block node; raw HTML is carried by a paragraph
   // (the bytes still round-trip intact).
   html: ['paragraph', 'html', 'html_block'],

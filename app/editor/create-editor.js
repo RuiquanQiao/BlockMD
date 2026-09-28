@@ -26,6 +26,8 @@ import { toolbarPlugin } from './toolbar.js';
 import { findPlugin } from './find.js';
 import { dropPlugin } from './drop.js';
 import { codeBlockPlugin } from './code-block.js';
+import { highlightPlugin } from './highlight.js';
+import { mathPlugins } from './math.js';
 
 /**
  * @param {object} opts
@@ -106,6 +108,8 @@ function buildEditor({ root, value, onChange }) {
     // Before `block`: this plugin's handleDrop must see a handle drag first.
     .use(dropPlugin)
     .use(codeBlockPlugin)
+    .use(highlightPlugin)
+    .use(mathPlugins)
     .use(block)
     .use(slash)
     .create();

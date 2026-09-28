@@ -18,20 +18,23 @@ import { gfm } from 'micromark-extension-gfm';
 import { gfmFromMarkdown, gfmToMarkdown } from 'mdast-util-gfm';
 import { frontmatter } from 'micromark-extension-frontmatter';
 import { frontmatterFromMarkdown, frontmatterToMarkdown } from 'mdast-util-frontmatter';
+import { math } from 'micromark-extension-math';
+import { mathFromMarkdown, mathToMarkdown } from 'mdast-util-math';
 
 /** Front matter fence kinds. Must match on both sides. */
 export const FRONTMATTER_KINDS = ['yaml'];
 
 /** Options passed to `fromMarkdown`. */
 export const parseOptions = () => ({
-  extensions: [gfm(), frontmatter(FRONTMATTER_KINDS)],
-  mdastExtensions: [gfmFromMarkdown(), frontmatterFromMarkdown(FRONTMATTER_KINDS)],
+  extensions: [gfm(), frontmatter(FRONTMATTER_KINDS), math()],
+  mdastExtensions: [gfmFromMarkdown(), frontmatterFromMarkdown(FRONTMATTER_KINDS), mathFromMarkdown()],
 });
 
 /** Extensions passed to `toMarkdown`; callers merge in style-inference options. */
 export const serializeExtensions = () => [
   gfmToMarkdown(),
   frontmatterToMarkdown(FRONTMATTER_KINDS),
+  mathToMarkdown(),
 ];
 
 /**
@@ -43,4 +46,6 @@ export const serializeExtensions = () => [
  */
 export const EDITOR_REQUIRED_REMARK_PLUGINS = [
   { id: 'bmdFrontmatter', pkg: 'remark-frontmatter', options: FRONTMATTER_KINDS },
+  // `$…$` / `$$…$$`, as GitHub renders them. Top-level `$$` blocks are mdast `math`.
+  { id: 'bmdMath', pkg: 'remark-math', options: undefined },
 ];

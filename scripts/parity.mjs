@@ -295,6 +295,20 @@ const checks = {
   },
   async 'render-math-inline'() { await t.open(); expect(await ev(`!!document.querySelector('.ProseMirror .katex')`), 'inline math is not typeset'); },
   async 'render-math-block'() { await t.open(); expect(await ev(`!!document.querySelector('.ProseMirror .katex-display')`), 'block math is not typeset'); },
+  async 'math-edit'() {
+    // Insert from the slash menu, type TeX, save.
+    await t.newLine(); await t.type('/equation'); await sleep(350); await t.key('Enter'); await sleep(200);
+    expect(await t.vis('.bmd-math-editor textarea'), '/equation did not open the equation editor');
+    await t.type('a+b'); await t.key('Ctrl+Enter');
+    expect((await t.save()) === 'start\n\n$$\na+b\n$$\n', 'new block equation saved as ' + J(await t.save()));
+    // Click an existing one, replace its TeX: only that block changes.
+    await t.open();
+    const r = await ev(`(() => { const e = document.querySelector('.bmd-math-block'); e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+    await t.click(r.x, r.y);
+    expect(await t.vis('.bmd-math-editor textarea'), 'clicking the equation did not open its editor');
+    await t.key('Ctrl+A'); await t.type('x+y'); await t.key('Ctrl+Enter');
+    expect((await t.save()) === FIXTURE.replace('a^2 + b^2 = c^2', 'x+y'), 'editing the equation changed more than its TeX');
+  },
   async 'render-inline'() {
     await t.open();
     const r = await ev(`(() => { const q = (s) => document.querySelector('.ProseMirror ' + s)?.textContent;
@@ -332,6 +346,16 @@ const checks = {
   async 'shortcut-inline-italic'() { await t.newLine(); await t.type('*it* '); expect(await ev(`!!document.querySelector('.ProseMirror em')`), '*text* did not become italic'); },
   async 'shortcut-inline-code'() { await t.newLine(); await t.type('`c` '); expect(await ev(`!!document.querySelector('.ProseMirror p > code')`), '`text` did not become code'); },
   async 'shortcut-inline-strike'() { await t.newLine(); await t.type('~s~ '); expect(await ev(`!!document.querySelector('.ProseMirror del, .ProseMirror s')`), '~text~ did not become strikethrough'); },
+
+  async 'shortcut-math'() {
+    await t.newLine(); await t.type('see $x^2$');
+    expect(await ev(`(() => { let v = null; __bmd.view().state.doc.descendants((n) => { if (n.type.name === 'math_inline') v = n.attrs.value; }); return v; })()`) === 'x^2', '$x^2$ did not become an equation');
+    await t.newLine(); await t.type('costs $5 and $10');
+    expect(await ev(`__bmd.view().state.doc.lastChild.textContent`) === 'costs $5 and $10', 'prices turned into an equation');
+    await t.newLine(); await t.type('$$ '); await sleep(200);
+    expect(last(await t.top()) === 'math_block' && (await t.vis('.bmd-math-editor textarea')), '$$ + space did not start a block equation');
+    await t.key('Escape');
+  },
 
   /* Keyboard */
   ...Object.fromEntries([

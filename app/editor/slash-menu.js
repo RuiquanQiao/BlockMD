@@ -13,13 +13,16 @@ import { slashFactory, SlashProvider } from '@milkdown/kit/plugin/slash';
 import { editorViewCtx } from '@milkdown/kit/core';
 import { TextSelection } from '@milkdown/prose/state';
 import { BLOCK_TYPES, blockAtSelection, insertDivider, turnInto } from './block-types.js';
+import { insertMathBlock, insertInlineMath } from './math.js';
 
 export const slash = slashFactory('bmdSlash');
 
-/** Menu entries: every block type, plus the divider, which has no text to carry. */
+/** Menu entries: every block type, plus the ones with no text to carry: divider, equations. */
 const ITEMS = [
   ...BLOCK_TYPES.map((t) => ({ ...t, run: (v) => turnInto(v, blockAtSelection(v.state), t.id) })),
   { id: 'hr', label: 'Divider', hint: '--- rule', keys: ['hr', 'divider', 'rule', 'separator'], run: insertDivider },
+  { id: 'math', label: 'Block equation', hint: '$$ TeX $$', keys: ['math', 'equation', 'latex', 'tex', 'formula'], run: insertMathBlock },
+  { id: 'imath', label: 'Inline equation', hint: '$ TeX $', keys: ['inline', 'equation', 'math', 'latex', 'tex'], run: insertInlineMath },
 ];
 
 /**

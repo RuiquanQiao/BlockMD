@@ -122,6 +122,11 @@ export const fixtures = [
     why: 'the common README shape: every definition stacked at the end',
     src: '# Title\n\nSome text with [x][a] and [y][b].\n\nMore text.\n\n[a]: https://example.com/a\n[b]: https://example.com/b\n',
   },
+  {
+    name: '23-math',
+    why: 'math is its own block type once remark-math is on: both sides must agree, or every block after it shifts',
+    src: 'Inline $E=mc^2$ and $$x$$ in text.\n\n$$\na^2 + b^2 = c^2\n$$\n\nIt costs $5 and $10.\n\n$$ \\sum_{i=1}^n i $$\n\nAfter the math.\n',
+  },
 ];
 
 /** Look up a fixture by name. */

@@ -234,3 +234,42 @@ test('edit · a brand-new list follows the document\'s bullet style', async () =
     await ed.dispose();
   }
 });
+
+// ——— Math: `$…$` and `$$…$$` are math nodes, and keep their bytes ———
+
+test('math · parsed as math nodes on the editor side', async () => {
+  const ed = await open('Inline $E=mc^2$ here.\n\n$$\na^2 + b^2 = c^2\n$$\n');
+  try {
+    const types = [];
+    ed.view.state.doc.descendants((n) => { types.push(n.type.name); });
+    assert.ok(types.includes('math_inline'), 'no math_inline in ' + types.join(','));
+    assert.ok(types.includes('math_block'), 'no math_block in ' + types.join(','));
+    assert.equal(ed.session.status().identical, true);
+  } finally {
+    await ed.dispose();
+  }
+});
+
+test('math · editing text beside math keeps the math bytes', async () => {
+  const src = 'Inline $E=mc^2$ here.\n\n$$\na^2 + b^2 = c^2\n$$\n';
+  const ed = await open(src);
+  try {
+    ed.view.dispatch(ed.view.state.tr.insertText('!', 'Inline'.length + 1));
+    assert.equal(ed.session.save(), src.replace('Inline', 'Inline!'));
+  } finally {
+    await ed.dispose();
+  }
+});
+
+test('math · a new equation saves as $…$ and $$…$$', async () => {
+  const ed = await open('text\n');
+  try {
+    const { schema } = ed.view.state;
+    const para = schema.nodes.paragraph.create(null, [schema.text('see '), schema.nodes.math_inline.create({ value: 'x^2' })]);
+    const block = schema.nodes.math_block.create({ value: '\int_0^1 x\,dx' });
+    ed.view.dispatch(ed.view.state.tr.insert(ed.view.state.doc.content.size, [para, block]));
+    assert.equal(ed.session.save(), 'text\n\nsee $x^2$\n\n$$\n\int_0^1 x\,dx\n$$\n');
+  } finally {
+    await ed.dispose();
+  }
+});

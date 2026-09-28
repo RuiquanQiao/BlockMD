@@ -64,7 +64,7 @@ test('mapping · failures that must be caught', async (t) => {
   });
 
   await t.test('an unregistered mdast type reports unknown-mdast-type', () => {
-    const r = buildMapping([B('math')], ['math_block']);
+    const r = buildMapping([B('containerDirective')], ['paragraph']);
     assert.equal(r.ok, false);
     assert.equal(r.reason, 'unknown-mdast-type');
     assert.match(r.detail, /MDAST_TO_PM/);

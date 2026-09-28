@@ -13,6 +13,7 @@
 import { $remark, $nodeSchema } from '@milkdown/kit/utils';
 import { editorViewCtx } from '@milkdown/kit/core';
 import remarkFrontmatter from 'remark-frontmatter';
+import remarkMath from 'remark-math';
 import { FRONTMATTER_KINDS } from './remark-config.js';
 
 /**
@@ -65,8 +66,56 @@ export const frontmatterNode = $nodeSchema('frontmatter', () => ({
   },
 }));
 
+/**
+ * Math: `$…$` / `$$…$$` (remark-math), matching micromark-extension-math on the splice
+ * side. A top-level `$$` block is mdast `math` → `math_block`; `$…$` inside a
+ * paragraph is `inlineMath` → `math_inline`.
+ *
+ * Both are atoms holding the TeX source in `value`: the editor shows them typeset
+ * (app/editor/math.js) and edits the source in a small popover, never as loose text
+ * that could be half-deleted. Rendering lives in the app, not here, so this module
+ * stays free of KaTeX and loads in the tests.
+ */
+export const mathRemark = $remark('bmdMath', () => remarkMath);
+
+export const mathInlineNode = $nodeSchema('math_inline', () => ({
+  group: 'inline',
+  inline: true,
+  atom: true,
+  selectable: true,
+  attrs: { value: { default: '' } },
+  parseDOM: [{ tag: 'span[data-bmd="math-inline"]', getAttrs: (dom) => ({ value: dom.dataset.value ?? '' }) }],
+  toDOM: (node) => ['span', { 'data-bmd': 'math-inline', 'data-value': node.attrs.value }, node.attrs.value],
+  parseMarkdown: {
+    match: ({ type }) => type === 'inlineMath',
+    runner: (state, node, type) => { state.addNode(type, { value: node.value ?? '' }); },
+  },
+  toMarkdown: {
+    match: (node) => node.type.name === 'math_inline',
+    runner: (state, node) => { state.addNode('inlineMath', undefined, node.attrs.value); },
+  },
+}));
+
+export const mathBlockNode = $nodeSchema('math_block', () => ({
+  group: 'block',
+  atom: true,
+  selectable: true,
+  defining: true,
+  attrs: { value: { default: '' } },
+  parseDOM: [{ tag: 'div[data-bmd="math-block"]', getAttrs: (dom) => ({ value: dom.dataset.value ?? '' }) }],
+  toDOM: (node) => ['div', { 'data-bmd': 'math-block', 'data-value': node.attrs.value }, node.attrs.value],
+  parseMarkdown: {
+    match: ({ type }) => type === 'math',
+    runner: (state, node, type) => { state.addNode(type, { value: node.value ?? '' }); },
+  },
+  toMarkdown: {
+    match: (node) => node.type.name === 'math_block',
+    runner: (state, node) => { state.addNode('math', undefined, node.attrs.value); },
+  },
+}));
+
 /** Everything needed to keep both remark instances in sync. All of it is required. */
-export const alignmentPlugins = [frontmatterRemark, frontmatterNode].flat();
+export const alignmentPlugins = [frontmatterRemark, frontmatterNode, mathRemark, mathInlineNode, mathBlockNode].flat();
 
 /**
  * Read the editor document's top-level node type names, for `buildMapping`.
