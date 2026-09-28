@@ -43,6 +43,10 @@
       "nsis": {
         "installMode": "perMachine",
         "installerHooks": "installer-hooks.nsh"
+      },
+      "wix": {
+        "fragmentPaths": ["windows/shell-registration.wxs"],
+        "componentGroupRefs": ["ShellRegistration"]
       }
     },
     "fileAssociations": [

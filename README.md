@@ -126,8 +126,37 @@ To check what Windows actually offers for an extension — which is not the same
 question as "is the ProgId in the registry":
 
 ```bash
-powershell -ExecutionPolicy Bypass -File scripts/check-assoc.ps1 .md
+npm run check:assoc
 ```
+
+Both installers register BlockMD identically. The `.msi` exists for unattended
+deployment (`msiexec /i BlockMD_x64_en-US.msi /qn`); the `-setup.exe` is the smaller
+and more usual choice. Either one needs an internet connection at install time if the
+Edge WebView2 runtime is missing — it is preinstalled on Windows 11, and bundling it
+offline would add ~130 MB to a 1.3 MB installer.
+
+### Checking what an installer leaves behind
+
+A developer's own machine is the worst place to test uninstallation: after a few
+install/uninstall cycles, anything the uninstaller misses gets silently rewritten by
+the next install, so the bug only ever appears on someone else's computer. The audit
+script makes that state visible.
+
+```bash
+npm run check:uninstall -- -Phase baseline    # before installing
+npm run check:uninstall -- -Phase installed   # after installing
+npm run check:uninstall -- -Phase removed     # after uninstalling
+```
+
+The middle phase is the load-bearing one: an installer that registered *nothing* would
+otherwise sail through the cleanliness check. It asserts that the three shell
+registrations are present and landed in the 64-bit registry view, so the final verdict
+means "it added things and took them all back" rather than "it was quiet".
+
+The verdict is only worth as much as the machine it runs on, and `-Phase baseline`
+prints whatever state it already found so you can judge that for yourself.
+`.github/workflows/installer-audit.yml` runs the whole cycle for both installers on a
+fresh GitHub runner — the cheapest clean room there is.
 
 ### Or run it from source
 

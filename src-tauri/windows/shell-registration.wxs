@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+  Shell registration for the MSI bundle — the WiX counterpart of installer-hooks.nsh.
+
+  Why this file exists at all: `bundle.targets: "all"` produces BOTH an NSIS
+  `-setup.exe` and an MSI, and the release workflow uploads both. But
+  `bundle.windows.nsis.installerHooks` is NSIS-only — the MSI never ran it. So the
+  three registrations that ADR-015 established as necessary (without them BlockMD is
+  invisible in "Open with" and in Settings → Default apps) existed in one of the two
+  installers we ship and not the other. Nobody testing the `-setup.exe` would ever
+  see it. See ADR-016.
+
+  Two deliberate differences from the NSIS hooks, both because the MSI's own
+  generated ProgIds differ from the NSIS ones:
+
+    NSIS registers ONE ProgId, BlockMD.md, for both extensions.
+    The MSI registers BlockMD.md for .md and BlockMD.markdown for .markdown.
+
+  Each installer is internally consistent; this fragment mirrors what the MSI itself
+  creates rather than what NSIS creates.
+
+  The other difference is uninstall: NSIS deletes keys imperatively in
+  NSIS_HOOK_POSTUNINSTALL, whereas Windows Installer removes exactly the values a
+  component wrote, transactionally. That is strictly better, and it is why the
+  component boundaries below follow the three registration purposes rather than
+  being collapsed into one.
+-->
+
+<?if $(sys.BUILDARCH)="x86"?>
+    <?define Win64 = "no" ?>
+<?else?>
+    <?define Win64 = "yes" ?>
+<?endif?>
+
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+    <Fragment>
+        <!--
+          Directory is required on the group even though nothing here installs a file:
+          every MSI component must belong to a directory. INSTALLDIR is defined by
+          Tauri's main.wxs template.
+        -->
+        <ComponentGroup Id="ShellRegistration" Directory="INSTALLDIR">
+
+            <!-- 1. The application itself: the generic "an app that can open files" entry. -->
+            <Component Id="ShellApplicationEntry"
+                       Guid="7B3C1E52-9A64-4D18-B0F7-2E5A8C41D903"
+                       Win64="$(var.Win64)">
+                <RegistryKey Root="HKLM"
+                             Key="Software\Classes\Applications\blockmd.exe"
+                             ForceDeleteOnUninstall="yes">
+                    <RegistryValue Name="FriendlyAppName" Type="string" Value="BlockMD" KeyPath="yes" />
+                    <RegistryValue Key="DefaultIcon" Type="string" Value="[INSTALLDIR]blockmd.exe,0" />
+                    <RegistryValue Key="shell\open\command" Type="string"
+                                   Value="&quot;[INSTALLDIR]blockmd.exe&quot; &quot;%1&quot;" />
+                    <RegistryValue Key="SupportedTypes" Name=".md" Type="string" Value="" />
+                    <RegistryValue Key="SupportedTypes" Name=".markdown" Type="string" Value="" />
+                </RegistryKey>
+            </Component>
+
+            <!--
+              2. Candidate handler for each extension.
+
+              A value NAME, not a default value: an extension may list many ProgIds, so
+              this adds ours without disturbing whatever else already claims .md. MSI
+              removes only the named value on uninstall, which is exactly the required
+              behaviour — deleting the whole OpenWithProgids key would evict every other
+              editor the user has installed.
+            -->
+            <Component Id="ShellOpenWithProgIds"
+                       Guid="1F8D46A0-C372-4B95-9E21-6A0B7D53F84C"
+                       Win64="$(var.Win64)">
+                <RegistryValue Root="HKLM" Key="Software\Classes\.md\OpenWithProgids"
+                               Name="BlockMD.md" Type="string" Value="" KeyPath="yes" />
+                <RegistryValue Root="HKLM" Key="Software\Classes\.markdown\OpenWithProgids"
+                               Name="BlockMD.markdown" Type="string" Value="" />
+            </Component>
+
+            <!-- 3. Default Programs capabilities: the Settings → Default apps page. -->
+            <Component Id="ShellRegisteredApplication"
+                       Guid="C4A95E17-08B6-4F23-A7D8-93E162B04F5A"
+                       Win64="$(var.Win64)">
+                <RegistryKey Root="HKLM" Key="Software\BlockMD\Capabilities"
+                             ForceDeleteOnUninstall="yes">
+                    <RegistryValue Name="ApplicationName" Type="string" Value="BlockMD" KeyPath="yes" />
+                    <RegistryValue Name="ApplicationDescription" Type="string"
+                                   Value="A Notion-style block editor whose files are just plain .md" />
+                    <RegistryValue Name="ApplicationIcon" Type="string" Value="[INSTALLDIR]blockmd.exe,0" />
+                    <RegistryValue Key="FileAssociations" Name=".md" Type="string" Value="BlockMD.md" />
+                    <RegistryValue Key="FileAssociations" Name=".markdown" Type="string" Value="BlockMD.markdown" />
+                </RegistryKey>
+                <RegistryValue Root="HKLM" Key="Software\RegisteredApplications"
+                               Name="BlockMD" Type="string" Value="Software\BlockMD\Capabilities" />
+            </Component>
+
+        </ComponentGroup>
+
+        <!--
+          The shell caches association data; without a notification the new entries do
+          not surface until the next sign-in. SHCNE_ASSOCCHANGED = 0x08000000 =
+          134217728 in decimal, written decimal because MSI Formatted fields treat the
+          brackets of a hex literal no differently from a property reference.
+
+          Square brackets inside ExeCommand must be escaped as [\[] and [\]] for the
+          same reason — this is the convention Tauri's own WebView2 bootstrap custom
+          action uses in the generated main.wxs.
+
+          Return='ignore': a cosmetic cache refresh must never be able to fail an
+          install. Worst case the entries appear after the next sign-in.
+        -->
+        <CustomAction Id="RefreshShellAssociations"
+                      Directory="INSTALLDIR"
+                      Execute="deferred"
+                      Impersonate="no"
+                      Return="ignore"
+                      ExeCommand="powershell.exe -NoProfile -NonInteractive -Command &quot;Add-Type -Namespace BlockMD -Name Shell -MemberDefinition '[\[]System.Runtime.InteropServices.DllImport(\&quot;shell32.dll\&quot;)[\]]public static extern void SHChangeNotify(int a, int b, System.IntPtr c, System.IntPtr d);' ; [\[]BlockMD.Shell[\]]::SHChangeNotify(134217728, 0, 0, 0)&quot;" />
+
+        <InstallExecuteSequence>
+            <Custom Action="RefreshShellAssociations" After="InstallFiles">NOT REMOVE</Custom>
+        </InstallExecuteSequence>
+    </Fragment>
+</Wix>

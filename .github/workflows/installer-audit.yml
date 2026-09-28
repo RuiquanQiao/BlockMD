@@ -1,0 +1,149 @@
+name: Installer audit
+
+# Run the real install/uninstall cycle on a machine that has never seen BlockMD.
+#
+# This exists because the author's Windows 11 Home has neither Windows Sandbox nor
+# Hyper-V (both Pro-only), so there is no clean local machine to test against — and a
+# developer's own machine is the one place where uninstall bugs are invisible, since
+# the next install silently rewrites whatever the uninstaller missed. A fresh runner is
+# the cheapest clean room available. See ADR-016.
+#
+# Separate from ci.yml on purpose: this builds the Rust release profile and both
+# bundles, which is far too slow to run on every push. Tag builds and manual dispatch.
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+jobs:
+  audit:
+    name: Install / uninstall on a clean Windows runner
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Disable git line-ending conversion
+        run: git config --global core.autocrlf false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+      - run: npm run desktop:build
+
+      # The runner must start clean, or every later verdict is meaningless: leftover
+      # state would let a broken uninstaller look correct. Asserting it here is what
+      # buys the whole job its authority.
+      - name: Assert the runner is clean
+        shell: pwsh
+        run: |
+          $out = & ./scripts/check-uninstall.ps1 -Phase baseline
+          $out | ForEach-Object { Write-Host $_ }
+          if ($out -match 'this machine is not clean') {
+            throw 'The runner already has BlockMD state. The audit cannot be trusted.'
+          }
+
+      # --- MSI ---------------------------------------------------------------------
+      # Audited first because it is the channel nobody tests by hand: the NSIS installer
+      # is what a developer double-clicks locally, so the MSI is where a divergence hides.
+
+      - name: Install the MSI
+        shell: pwsh
+        run: |
+          $msi = (Get-ChildItem src-tauri/target/release/bundle/msi/*.msi)[0].FullName
+          Write-Host "Installing $msi"
+          $p = Start-Process msiexec -ArgumentList '/i', "`"$msi`"", '/qn', '/norestart', '/l*v', 'msi-install.log' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { Get-Content msi-install.log -Tail 60; throw "msiexec exited $($p.ExitCode)" }
+
+      - name: Audit what the MSI registered
+        shell: pwsh
+        run: ./scripts/check-uninstall.ps1 -Phase installed
+
+      # The same shell API the "Open with" dialog is built from. A registry key existing
+      # proves nothing about the dialog offering the app — ADR-015 was written after
+      # mistaking one for the other.
+      - name: Confirm BlockMD is offered for .md
+        shell: pwsh
+        run: |
+          $out = & ./scripts/check-assoc.ps1 .md
+          $out | ForEach-Object { Write-Host $_ }
+          if ($out -match 'ABSENT') { throw 'BlockMD is not in the Open with list after installing the MSI.' }
+
+      - name: Uninstall the MSI
+        shell: pwsh
+        run: |
+          $msi = (Get-ChildItem src-tauri/target/release/bundle/msi/*.msi)[0].FullName
+          $p = Start-Process msiexec -ArgumentList '/x', "`"$msi`"", '/qn', '/norestart', '/l*v', 'msi-uninstall.log' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { Get-Content msi-uninstall.log -Tail 60; throw "msiexec exited $($p.ExitCode)" }
+
+      - name: Audit what the MSI left behind
+        shell: pwsh
+        run: ./scripts/check-uninstall.ps1 -Phase removed
+
+      # --- NSIS --------------------------------------------------------------------
+
+      - name: Reset the baseline for the NSIS run
+        shell: pwsh
+        run: ./scripts/check-uninstall.ps1 -Phase baseline
+
+      - name: Install the NSIS bundle
+        shell: pwsh
+        run: |
+          $exe = (Get-ChildItem src-tauri/target/release/bundle/nsis/*-setup.exe)[0].FullName
+          Write-Host "Installing $exe"
+          $p = Start-Process $exe -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "installer exited $($p.ExitCode)" }
+          # /S returns before the install has fully settled on some runners.
+          $deadline = (Get-Date).AddSeconds(90)
+          while (-not (Test-Path "$env:ProgramFiles\BlockMD\blockmd.exe")) {
+            if ((Get-Date) -gt $deadline) { throw 'Timed out waiting for the NSIS install to appear.' }
+            Start-Sleep -Seconds 2
+          }
+
+      - name: Audit what the NSIS bundle registered
+        shell: pwsh
+        run: ./scripts/check-uninstall.ps1 -Phase installed
+
+      - name: Confirm BlockMD is offered for .md
+        shell: pwsh
+        run: |
+          $out = & ./scripts/check-assoc.ps1 .md
+          $out | ForEach-Object { Write-Host $_ }
+          if ($out -match 'ABSENT') { throw 'BlockMD is not in the Open with list after installing the NSIS bundle.' }
+
+      - name: Uninstall the NSIS bundle
+        shell: pwsh
+        run: |
+          $uninstaller = "$env:ProgramFiles\BlockMD\uninstall.exe"
+          if (-not (Test-Path $uninstaller)) { throw "No uninstaller at $uninstaller" }
+          # An NSIS uninstaller copies itself to %TEMP% and returns immediately, so
+          # -Wait is not enough; poll for the install directory to disappear.
+          Start-Process $uninstaller -ArgumentList '/S' -Wait
+          $deadline = (Get-Date).AddSeconds(90)
+          while (Test-Path "$env:ProgramFiles\BlockMD") {
+            if ((Get-Date) -gt $deadline) { break }
+            Start-Sleep -Seconds 2
+          }
+
+      - name: Audit what the NSIS bundle left behind
+        shell: pwsh
+        run: ./scripts/check-uninstall.ps1 -Phase removed
+
+      - name: Upload installer logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-audit-logs
+          path: |
+            msi-install.log
+            msi-uninstall.log
+          if-no-files-found: ignore
