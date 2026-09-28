@@ -51,8 +51,11 @@
     };
   }
 
+  // cache: 'no-cache' revalidates instead of reusing: GitHub Pages lets browsers keep
+  // any file for 10 minutes, which kept showing the previous version after a release.
+  // An unchanged list costs a 304 with no body.
   function fetchJSON(url) {
-    return fetch(url, { headers: { Accept: 'application/vnd.github+json' } }).then(function (res) {
+    return fetch(url, { cache: 'no-cache', headers: { Accept: 'application/vnd.github+json' } }).then(function (res) {
       if (!res.ok) throw new Error(url + ' → HTTP ' + res.status);
       return res.json();
     });
