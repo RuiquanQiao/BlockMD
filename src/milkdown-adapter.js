@@ -15,6 +15,7 @@ import { editorViewCtx } from '@milkdown/kit/core';
 import remarkFrontmatter from 'remark-frontmatter';
 import remarkMath from 'remark-math';
 import { FRONTMATTER_KINDS } from './remark-config.js';
+import { groupContainers, containersToMarkdown } from './containers.js';
 
 /**
  * Mount remark-frontmatter into Milkdown's remark instance.
@@ -114,8 +115,62 @@ export const mathBlockNode = $nodeSchema('math_block', () => ({
   },
 }));
 
+/**
+ * Toggles and columns (containers.js): regroup their sibling nodes exactly as the
+ * splice layer does, and teach remark-stringify to write them back.
+ *
+ * Both are atoms whose parts are kept as raw Markdown text — `body` for a toggle,
+ * `columns` for a row. The app edits each part in a nested editor
+ * (app/editor/containers.js) and writes back only the part that changed, so the
+ * other parts keep their bytes.
+ */
+export const containersRemark = $remark('bmdContainers', () => function attacher() {
+  const data = this.data();
+  (data.toMarkdownExtensions ??= []).push(containersToMarkdown);
+  return (tree, file) => { groupContainers(tree, String(file)); };
+});
+
+export const toggleNode = $nodeSchema('toggle', () => ({
+  group: 'block',
+  atom: true,
+  selectable: true,
+  defining: true,
+  attrs: { summary: { default: '' }, body: { default: '' }, open: { default: false } },
+  parseDOM: [{ tag: 'div[data-bmd="toggle"]', getAttrs: (d) => ({ summary: d.dataset.summary ?? '', body: d.dataset.body ?? '' }) }],
+  toDOM: (n) => ['div', { 'data-bmd': 'toggle', 'data-summary': n.attrs.summary, 'data-body': n.attrs.body }],
+  parseMarkdown: {
+    match: ({ type }) => type === 'bmdToggle',
+    runner: (state, node, type) => { state.addNode(type, { summary: node.summary, body: node.body, open: node.open }); },
+  },
+  toMarkdown: {
+    match: (node) => node.type.name === 'toggle',
+    runner: (state, node) => { state.addNode('bmdToggle', undefined, undefined, { ...node.attrs }); },
+  },
+}));
+
+export const columnRowNode = $nodeSchema('column_row', () => ({
+  group: 'block',
+  atom: true,
+  selectable: true,
+  defining: true,
+  attrs: { columns: { default: ['', ''] } },
+  parseDOM: [{ tag: 'div[data-bmd="columns"]', getAttrs: (d) => ({ columns: JSON.parse(d.dataset.columns ?? '["",""]') }) }],
+  toDOM: (n) => ['div', { 'data-bmd': 'columns', 'data-columns': JSON.stringify(n.attrs.columns) }],
+  parseMarkdown: {
+    match: ({ type }) => type === 'bmdRow',
+    runner: (state, node, type) => { state.addNode(type, { columns: node.columns }); },
+  },
+  toMarkdown: {
+    match: (node) => node.type.name === 'column_row',
+    runner: (state, node) => { state.addNode('bmdRow', undefined, undefined, { columns: node.attrs.columns }); },
+  },
+}));
+
 /** Everything needed to keep both remark instances in sync. All of it is required. */
-export const alignmentPlugins = [frontmatterRemark, frontmatterNode, mathRemark, mathInlineNode, mathBlockNode].flat();
+export const alignmentPlugins = [
+  frontmatterRemark, frontmatterNode, mathRemark, mathInlineNode, mathBlockNode,
+  containersRemark, toggleNode, columnRowNode,
+].flat();
 
 /**
  * Read the editor document's top-level node type names, for `buildMapping`.

@@ -15,7 +15,8 @@ import { TextSelection, NodeSelection } from '@milkdown/prose/state';
 import { DocumentSession } from './session.js';
 import * as platform from './platform.js';
 import { startUpdateChecks } from './updater.js';
-import { setImageBase } from './editor/image.js';
+import { setImageBase, insertImages, IMAGE_FILE } from './editor/image.js';
+import { setUpPageStyle } from './page-style.js';
 
 const DEMO = `# BlockMD demo
 
@@ -269,6 +270,7 @@ el.btnSource.addEventListener('click', () => {
 });
 
 el.btnOpen.addEventListener('click', openFile);
+setUpPageStyle(document.getElementById('btn-style'));
 el.btnSave.addEventListener('click', () => saveFile());
 
 el.fileInput.addEventListener('change', async (e) => {
@@ -296,7 +298,26 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
-platform.onFileDropped(({ path, name, text }) => loadGuarded(text, name, path));
+// A dropped Markdown file is opened; dropped images go into the document where they
+// were dropped (saved beside it, see editor/image.js).
+platform.onFileDropped(async (file) => {
+  try {
+    if (IMAGE_FILE.test(file.name)) {
+      let view = null;
+      editor.action((ctx) => { view = ctx.get(editorViewCtx); });
+      await insertImages(view, [file], { x: file.x, y: file.y });
+    } else if (/\.(md|markdown|mdx|txt)$/i.test(file.name)) {
+      await loadGuarded(platform.decodeFile(await file.bytes()), file.name, file.path);
+    } else {
+      flash(`${file.name}: BlockMD opens Markdown files and inserts images.`);
+    }
+  } catch (err) {
+    flash(String(err.message ?? err));
+  }
+});
+
+// Editor modules report problems here (e.g. an image pasted into an unsaved document).
+window.addEventListener('bmd-flash', (e) => flash(e.detail));
 
 /** Desktop only: do not let the window close on top of unsaved edits. */
 async function guardWindowClose() {

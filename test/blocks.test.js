@@ -273,3 +273,49 @@ test('math · a new equation saves as $…$ and $$…$$', async () => {
     await ed.dispose();
   }
 });
+
+// ——— Toggles and columns: grouped container blocks (src/containers.js) ———
+
+test('containers · a toggle and a column row are one block each', async () => {
+  const src = 'a\n\n<details>\n<summary>T</summary>\n\nbody\n\n</details>\n\n<div class="bmd-row">\n<div class="bmd-col">\n\nL\n\n</div>\n<div class="bmd-col">\n\nR\n\n</div>\n</div>\n';
+  const ed = await open(src);
+  try {
+    const top = [];
+    ed.view.state.doc.forEach((n) => top.push(n.type.name));
+    assert.deepEqual(top, ['paragraph', 'toggle', 'column_row']);
+    assert.equal(ed.view.state.doc.child(1).attrs.summary, 'T');
+    assert.equal(ed.view.state.doc.child(1).attrs.body, 'body');
+    assert.deepEqual(ed.view.state.doc.child(2).attrs.columns, ['L', 'R']);
+    assert.equal(ed.session.save(), src);
+  } finally {
+    await ed.dispose();
+  }
+});
+
+test('containers · editing one column rewrites only that column', async () => {
+  const src = '<div class="bmd-row">\n<div class="bmd-col">\n\n* left _em_\n\n</div>\n<div class="bmd-col">\n\n* right\n\n</div>\n</div>\n\nafter\n';
+  const ed = await open(src);
+  try {
+    const row = ed.block(0);
+    ed.view.dispatch(ed.view.state.tr.setNodeMarkup(row.pos, undefined, { columns: [row.node.attrs.columns[0], '* right, edited'] }));
+    assert.equal(ed.session.save(), src.replace('* right\n', '* right, edited\n'));
+  } finally {
+    await ed.dispose();
+  }
+});
+
+test('containers · a new toggle and a new row save in the GitHub-compatible form', async () => {
+  const ed = await open('x\n');
+  try {
+    const { schema } = ed.view.state;
+    ed.view.dispatch(ed.view.state.tr.insert(ed.view.state.doc.content.size, [
+      schema.nodes.toggle.create({ summary: 'A < B', body: 'inside' }),
+      schema.nodes.column_row.create({ columns: ['one', ''] }),
+    ]));
+    assert.equal(ed.session.save(),
+      'x\n\n<details>\n<summary>A &lt; B</summary>\n\ninside\n\n</details>\n\n' +
+      '<div class="bmd-row">\n<div class="bmd-col">\n\none\n\n</div>\n<div class="bmd-col">\n\n</div>\n</div>\n');
+  } finally {
+    await ed.dispose();
+  }
+});

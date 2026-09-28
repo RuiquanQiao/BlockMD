@@ -84,9 +84,17 @@ async function readBytes(path) {
       : Uint8Array.from(res);
 }
 
-const IMAGE_TYPES = {
+/**
+ * Content types for local files shown in the page. They matter: a blob without a real
+ * type is `application/octet-stream`, and a frame given one *downloads* it — a PDF
+ * preview once dropped a copy into Downloads on every render.
+ */
+const MEDIA_TYPES = {
   png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
   webp: 'image/webp', svg: 'image/svg+xml', avif: 'image/avif', bmp: 'image/bmp', ico: 'image/x-icon',
+  mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime', ogv: 'video/ogg',
+  mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', oga: 'audio/ogg', m4a: 'audio/mp4',
+  flac: 'audio/flac', aac: 'audio/aac', opus: 'audio/opus', pdf: 'application/pdf',
 };
 /** Absolute path → object URL, so re-rendering a block doesn't re-read the file. */
 const imageUrls = new Map();
@@ -116,7 +124,10 @@ export async function imageUrl(src, docPath) {
 
   if (!imageUrls.has(full)) {
     const ext = full.split('.').pop().toLowerCase();
-    const blob = new Blob([await readBytes(full)], { type: IMAGE_TYPES[ext] ?? 'application/octet-stream' });
+    const type = MEDIA_TYPES[ext];
+    // Never hand the page an untyped blob: it would be offered as a download.
+    if (!type) throw new Error(`Unsupported file type: .${ext}`);
+    const blob = new Blob([await readBytes(full)], { type });
     imageUrls.set(full, URL.createObjectURL(blob));
   }
   return imageUrls.get(full);
@@ -166,51 +177,64 @@ export async function confirmDiscard(message) {
 }
 
 /**
- * Files dropped onto the window. Desktop delivers paths, the browser delivers File
- * objects, so both are normalised to `{ path, name, text }`.
- * @param {(file: {path: string|null, name: string, text: string}) => void} onFile
+ * Files dropped onto the window, one call per file. Desktop delivers paths, the
+ * browser delivers File objects; both become `{ path, name, x, y, bytes() }`, with the
+ * drop point in CSS pixels and the contents read only if the caller wants them.
+ * @param {(file: {path: string|null, name: string, x: number, y: number, bytes: () => Promise<Uint8Array>}) => void} onFile
  */
 export async function onFileDropped(onFile) {
   if (isDesktop) {
     const { getCurrentWebview } = await import('@tauri-apps/api/webview');
-    await getCurrentWebview().onDragDropEvent(async (event) => {
+    await getCurrentWebview().onDragDropEvent((event) => {
       if (event.payload.type !== 'drop') return;
-      const path = event.payload.paths?.[0];
-      if (!path) return;
-      onFile({ path, name: basename(path), text: await readFile(path) });
+      // Tauri reports physical pixels; the page works in CSS pixels.
+      const scale = window.devicePixelRatio || 1;
+      const x = (event.payload.position?.x ?? 0) / scale;
+      const y = (event.payload.position?.y ?? 0) / scale;
+      for (const path of event.payload.paths ?? []) {
+        onFile({ path, name: basename(path), x, y, bytes: () => readBytes(path) });
+      }
     });
     return;
   }
 
-  window.addEventListener('dragover', (e) => e.preventDefault());
-  window.addEventListener('drop', async (e) => {
+  window.addEventListener('dragover', (e) => { if (e.dataTransfer?.types.includes('Files')) e.preventDefault(); });
+  window.addEventListener('drop', (e) => {
+    const files = [...(e.dataTransfer?.files ?? [])];
+    if (!files.length) return;
     e.preventDefault();
-    const file = e.dataTransfer?.files?.[0];
-    if (!file) return;
-    onFile({
-      path: null,
-      name: file.name,
-      text: decodeFile(new Uint8Array(await file.arrayBuffer())),
-    });
+    for (const file of files) {
+      onFile({ path: null, name: file.name, x: e.clientX, y: e.clientY, bytes: async () => new Uint8Array(await file.arrayBuffer()) });
+    }
   });
 }
 
 /**
- * A newer published release, or null. Desktop release builds only: a browser tab has
- * nothing to update, and a dev build would always find the last release "newer" or
- * try to replace itself with an installer.
- * @returns {Promise<import('@tauri-apps/plugin-updater').Update|null>}
+ * Save a pasted or dropped file into an `assets` folder next to the document and
+ * return the relative path to write into the Markdown. A taken name gets -1, -2, …;
+ * the desktop command refuses to overwrite, so two images can never collide.
+ * @param {string} docPath Absolute path of the open document
+ * @param {string} name Suggested file name
+ * @param {Uint8Array} bytes
+ * @returns {Promise<string>} e.g. `assets/screenshot-1.png`
  */
-export async function checkForUpdate() {
-  if (!isDesktop || import.meta.env?.DEV) return null;
-  const { check } = await import('@tauri-apps/plugin-updater');
-  return check();
-}
-
-/** Restart the app after an update has been installed (macOS; Windows restarts by itself). */
-export async function relaunch() {
-  const { relaunch } = await import('@tauri-apps/plugin-process');
-  await relaunch();
+export async function saveAsset(docPath, name, bytes) {
+  const { invoke } = await tauri();
+  const dir = docPath.slice(0, Math.max(docPath.lastIndexOf('/'), docPath.lastIndexOf('\\')));
+  const clean = name.replace(/[\\/:*?"<>|#%]+/g, '-').replace(/\s+/g, '-') || 'image.png';
+  const dot = clean.lastIndexOf('.');
+  const stem = dot > 0 ? clean.slice(0, dot) : clean;
+  const ext = dot > 0 ? clean.slice(dot) : '';
+  for (let n = 0; n < 1000; n++) {
+    const file = n ? `${stem}-${n}${ext}` : `${stem}${ext}`;
+    try {
+      await invoke('write_asset', bytes, { headers: { path: encodeURIComponent(`${dir}/assets/${file}`) } });
+      return `assets/${file}`;
+    } catch (err) {
+      if (!/exist/i.test(String(err))) throw new Error(String(err));
+    }
+  }
+  throw new Error('Could not find a free file name in the assets folder.');
 }
 
 /* ------------------------------------------------------------------ browser */

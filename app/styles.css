@@ -675,3 +675,77 @@ body {
   .milkdown pre .hljs-variable, .milkdown pre .hljs-params, .milkdown pre .hljs-name, .milkdown pre .hljs-tag { color: #ffa657; }
   .milkdown pre .hljs-meta, .milkdown pre .hljs-deletion { color: #ffa198; }
 }
+
+/* ——— Toggles and columns (editor/containers.js) ——— */
+.milkdown .bmd-toggle { position: relative; }
+.bmd-toggle-head { display: flex; align-items: flex-start; gap: 2px; }
+.bmd-toggle-arrow {
+  flex: none; width: 24px; height: 24px; margin-right: 2px; padding: 0; border: 0; border-radius: 4px;
+  background: none; color: var(--ink); cursor: pointer; transition: transform 0.15s;
+}
+.bmd-toggle-arrow::before {
+  content: ""; display: block; width: 100%; height: 100%; background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M9 6l7 6-7 6z'/%3E%3C/svg%3E") center / 16px no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M9 6l7 6-7 6z'/%3E%3C/svg%3E") center / 16px no-repeat;
+}
+.bmd-toggle-arrow:hover { background: var(--hover); }
+.bmd-toggle[data-open="true"] > .bmd-toggle-head .bmd-toggle-arrow { transform: rotate(90deg); }
+.bmd-toggle-summary { flex: 1; min-height: 24px; outline: none; }
+.bmd-toggle-summary:empty::before { content: attr(data-placeholder); color: var(--ink-3); }
+.bmd-toggle-body { padding-left: 26px; }
+.bmd-toggle[data-open="false"] > .bmd-toggle-body { display: none; }
+.bmd-nested { outline: none; min-height: 1.5em; }
+.bmd-columns { display: grid; grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr)); gap: 24px; }
+.bmd-column { min-width: 0; border-radius: 4px; }
+.bmd-column:hover { box-shadow: inset 0 0 0 1px var(--rule); }
+
+/* ——— Media previews under a lone link (editor/media.js) ——— */
+.milkdown .bmd-media { margin: 2px 0 8px; border-radius: 6px; overflow: hidden; }
+.milkdown .bmd-media-video video, .milkdown .bmd-media-el { display: block; max-width: 100%; border: 0; }
+.milkdown .bmd-media-audio audio { width: 100%; }
+.milkdown .bmd-media-pdf iframe { width: 100%; height: 520px; border: 1px solid var(--rule); border-radius: 6px; }
+.milkdown .bmd-media-bookmark { padding: 12px 14px; border: 1px solid var(--rule-strong); }
+.milkdown .bmd-bookmark-title { font-size: 14px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.milkdown .bmd-bookmark-url { font-size: 12px; color: var(--ink-3); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.milkdown .bmd-media-missing { font-size: 13px; color: var(--ink-3); padding: 8px 10px; border: 1px dashed var(--rule-strong); }
+
+/* ——— Page style (page-style.js): Notion's Default / Serif / Mono, small text, full width ——— */
+:root { --font-serif: "Lyon-Text", Georgia, "Noto Serif SC", "Songti SC", "SimSun", serif; }
+.style-serif .milkdown .ProseMirror { font-family: var(--font-serif); }
+.style-mono .milkdown .ProseMirror { font-family: var(--font-mono); font-size: 0.94em; }
+.style-small .milkdown { font-size: 14px; }
+.style-wide { --column: 100vw; }
+.style-wide .editor-host { max-width: none; }
+
+.bmd-style-menu { width: 260px; padding: 8px 6px; z-index: 46; }
+.bmd-style-label { font-size: 12px; color: var(--ink-3); padding: 0 6px 6px; }
+.bmd-style-fonts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 0 2px 6px; margin-bottom: 4px; border-bottom: 1px solid var(--rule); }
+.bmd-style-font {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0;
+  font: inherit; font-size: 12px; color: var(--ink-2); border: 0; border-radius: 6px; background: none; cursor: pointer;
+}
+.bmd-style-font:hover { background: var(--hover); }
+.bmd-style-font.is-active { color: var(--accent); }
+.bmd-style-sample { font-size: 22px; line-height: 1.2; color: var(--ink); }
+.bmd-style-font.is-active .bmd-style-sample { color: var(--accent); }
+.bmd-sample-serif { font-family: var(--font-serif); }
+.bmd-sample-mono { font-family: var(--font-mono); }
+.bmd-style-toggle { display: flex; justify-content: space-between; align-items: center; width: 100%; text-align: left; }
+.bmd-switch { position: relative; width: 28px; height: 16px; border-radius: 8px; background: var(--rule-strong); transition: background 0.15s; flex: none; }
+.bmd-switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; transition: transform 0.15s; }
+.bmd-switch.is-on { background: var(--accent); }
+.bmd-switch.is-on::after { transform: translateX(12px); }
+
+/* ——— Block range selection (editor/select.js) ——— */
+.milkdown .bmd-block-selected { background: var(--select); border-radius: 4px; }
+
+/* ——— Emoji picker (editor/emoji.js) ——— */
+.bmd-emoji {
+  position: fixed; z-index: 46; width: 336px; max-height: 220px; overflow-y: auto; padding: 6px;
+  display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px;
+  background: var(--bg); border-radius: 6px;
+  box-shadow: rgba(15, 15, 15, 0.05) 0 0 0 1px, rgba(15, 15, 15, 0.1) 0 3px 6px, rgba(15, 15, 15, 0.2) 0 9px 24px;
+}
+.bmd-emoji[data-show="false"] { visibility: hidden; left: -9999px; top: -9999px; }
+.bmd-emoji-item { font-size: 22px; line-height: 1; padding: 5px 0; border: 0; border-radius: 4px; background: none; cursor: pointer; }
+.bmd-emoji-item:hover, .bmd-emoji-item.is-active { background: var(--hover); }

@@ -28,6 +28,10 @@ import { dropPlugin } from './drop.js';
 import { codeBlockPlugin } from './code-block.js';
 import { highlightPlugin } from './highlight.js';
 import { mathPlugins } from './math.js';
+import { containerViewsPlugin } from './containers.js';
+import { mediaPlugin } from './media.js';
+import { emojiPlugin } from './emoji.js';
+import { blockSelectPlugin } from './select.js';
 
 /**
  * @param {object} opts
@@ -101,6 +105,9 @@ function buildEditor({ root, value, onChange }) {
     .use(imagePlugin)
     // Pasted text is parsed as Markdown, so pasting a README gives blocks, not one paragraph.
     .use(clipboard)
+    // Before keymapPlugin: while open, the picker and a block range own the keys they use.
+    .use(emojiPlugin)
+    .use(blockSelectPlugin)
     .use(keymapPlugin)
     .use(inputRules)
     .use(toolbarPlugin)
@@ -110,6 +117,8 @@ function buildEditor({ root, value, onChange }) {
     .use(codeBlockPlugin)
     .use(highlightPlugin)
     .use(mathPlugins)
+    .use(containerViewsPlugin)
+    .use(mediaPlugin)
     .use(block)
     .use(slash)
     .create();

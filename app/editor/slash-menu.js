@@ -14,6 +14,8 @@ import { editorViewCtx } from '@milkdown/kit/core';
 import { TextSelection } from '@milkdown/prose/state';
 import { BLOCK_TYPES, blockAtSelection, insertDivider, turnInto } from './block-types.js';
 import { insertMathBlock, insertInlineMath } from './math.js';
+import { insertToggle, insertColumns } from './containers.js';
+import { openEmojiPicker } from './emoji.js';
 
 export const slash = slashFactory('bmdSlash');
 
@@ -21,6 +23,10 @@ export const slash = slashFactory('bmdSlash');
 const ITEMS = [
   ...BLOCK_TYPES.map((t) => ({ ...t, run: (v) => turnInto(v, blockAtSelection(v.state), t.id) })),
   { id: 'hr', label: 'Divider', hint: '--- rule', keys: ['hr', 'divider', 'rule', 'separator'], run: insertDivider },
+  { id: 'toggle', label: 'Toggle list', hint: '<details>', keys: ['toggle', 'details', 'collapse', 'fold'], run: insertToggle },
+  { id: 'col2', label: '2 columns', hint: 'side by side', keys: ['columns', 'col', '2', 'two', 'layout', 'side'], run: (v) => insertColumns(v, 2) },
+  { id: 'col3', label: '3 columns', hint: 'side by side', keys: ['columns', 'col', '3', 'three', 'layout', 'side'], run: (v) => insertColumns(v, 3) },
+  { id: 'emoji', label: 'Emoji', hint: ':smile:', keys: ['emoji', 'smiley', 'icon', 'face'], run: openEmojiPicker },
   { id: 'math', label: 'Block equation', hint: '$$ TeX $$', keys: ['math', 'equation', 'latex', 'tex', 'formula'], run: insertMathBlock },
   { id: 'imath', label: 'Inline equation', hint: '$ TeX $', keys: ['inline', 'equation', 'math', 'latex', 'tex'], run: insertInlineMath },
 ];

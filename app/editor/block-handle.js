@@ -17,6 +17,7 @@ import { offset } from '@floating-ui/dom';
 import { createBlockMenu } from './block-menu.js';
 import { guardHandlePosition } from './handle-guard.js';
 import { OPEN_BLOCK_MENU } from './keymap.js';
+import { EXTEND_SELECTION } from './select.js';
 
 /** Gap between the handle's right edge and the left edge of the text column. */
 const HANDLE_GAP = 8;
@@ -119,6 +120,11 @@ export function createBlockHandle(ctx, view) {
     e.preventDefault();
     const active = provider.active;
     if (!active) return;
+    // Shift+click: extend a block selection to this block instead (select.js).
+    if (e.shiftKey && active.$pos.depth === 0) {
+      ctx.get(editorViewCtx).dom.dispatchEvent(new CustomEvent(EXTEND_SELECTION, { detail: active.$pos.pos }));
+      return;
+    }
     const view = ctx.get(editorViewCtx);
     if (NodeSelection.isSelectable(active.node)) {
       const { state } = view;

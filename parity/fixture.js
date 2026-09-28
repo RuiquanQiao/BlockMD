@@ -44,4 +44,30 @@ Inline math $E=mc^2$ here.
 $$
 a^2 + b^2 = c^2
 $$
+
+<details>
+<summary>Toggle title</summary>
+
+Hidden text inside.
+
+</details>
+
+<div class="bmd-row">
+<div class="bmd-col">
+
+Left column
+
+</div>
+<div class="bmd-col">
+
+Right column
+
+</div>
+</div>
+
+[BlockMD website](https://ruiquanqiao.github.io/BlockMD/)
+
+[beep](media/beep.wav)
+
+[manual](media/doc.pdf)
 `;

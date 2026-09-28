@@ -20,6 +20,8 @@ import { frontmatter } from 'micromark-extension-frontmatter';
 import { frontmatterFromMarkdown, frontmatterToMarkdown } from 'mdast-util-frontmatter';
 import { math } from 'micromark-extension-math';
 import { mathFromMarkdown, mathToMarkdown } from 'mdast-util-math';
+import { fromMarkdown } from 'mdast-util-from-markdown';
+import { groupContainers, containersToMarkdown } from './containers.js';
 
 /** Front matter fence kinds. Must match on both sides. */
 export const FRONTMATTER_KINDS = ['yaml'];
@@ -30,11 +32,20 @@ export const parseOptions = () => ({
   mdastExtensions: [gfmFromMarkdown(), frontmatterFromMarkdown(FRONTMATTER_KINDS), mathFromMarkdown()],
 });
 
+/**
+ * Parse Markdown exactly as the editor does: the micromark/mdast extensions above,
+ * then the container regrouping (toggles, columns — see containers.js), which the
+ * editor applies through its remark plugin. Use this, never bare `fromMarkdown`.
+ * @param {string} text
+ */
+export const parseMarkdown = (text) => groupContainers(fromMarkdown(text, parseOptions()), text);
+
 /** Extensions passed to `toMarkdown`; callers merge in style-inference options. */
 export const serializeExtensions = () => [
   gfmToMarkdown(),
   frontmatterToMarkdown(FRONTMATTER_KINDS),
   mathToMarkdown(),
+  containersToMarkdown,
 ];
 
 /**
@@ -48,4 +59,6 @@ export const EDITOR_REQUIRED_REMARK_PLUGINS = [
   { id: 'bmdFrontmatter', pkg: 'remark-frontmatter', options: FRONTMATTER_KINDS },
   // `$…$` / `$$…$$`, as GitHub renders them. Top-level `$$` blocks are mdast `math`.
   { id: 'bmdMath', pkg: 'remark-math', options: undefined },
+  // Not a package: groupContainers from containers.js, as a remark transform.
+  { id: 'bmdContainers', pkg: null, options: undefined },
 ];

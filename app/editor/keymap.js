@@ -13,8 +13,9 @@ import { Plugin, PluginKey, NodeSelection, TextSelection } from '@milkdown/prose
 import { toggleMark } from '@milkdown/prose/commands';
 import { blockAtSelection, turnInto, duplicateBlock } from './block-types.js';
 import { openLinkEditor } from './link.js';
+import { turnIntoToggle } from './containers.js';
 
-/** Ctrl+Shift+digit → block type. 7 is Notion's toggle list, which isn't built yet. */
+/** Ctrl+Shift+digit → block type, as in Notion. 7 (toggle) is handled separately. */
 const TURN_INTO = { 0: 'text', 1: 'h1', 2: 'h2', 3: 'h3', 4: 'todo', 5: 'ul', 6: 'ol', 8: 'code' };
 
 /** Event the block handle listens for, to open its menu on the current block. */
@@ -70,6 +71,7 @@ function handleKeyDown(view, e) {
       return toggleMark(state.schema.marks.strike_through)(state, view.dispatch);
     }
     const digit = /^Digit(\d)$/.exec(e.code)?.[1];
+    if (digit === '7') { turnIntoToggle(view); return true; }
     if (digit && TURN_INTO[digit]) {
       turnInto(view, blockAtSelection(state), TURN_INTO[digit]);
       return true;
@@ -86,7 +88,8 @@ function handleKeyDown(view, e) {
         : blockAtSelection(state));
       return true;
     }
-    if (e.code === 'Slash') {
+    // Not from a toggle body or column: the block menu belongs to the main editor.
+    if (e.code === 'Slash' && !view.dom.classList.contains('bmd-nested')) {
       view.dom.dispatchEvent(new CustomEvent(OPEN_BLOCK_MENU, { detail: blockAtSelection(state) }));
       return true;
     }

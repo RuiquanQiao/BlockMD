@@ -8,9 +8,8 @@
  * This module has no ProseMirror dependency and can be tested standalone.
  */
 
-import { fromMarkdown } from 'mdast-util-from-markdown';
 import { toMarkdown } from 'mdast-util-to-markdown';
-import { parseOptions, serializeExtensions } from './remark-config.js';
+import { parseMarkdown, serializeExtensions } from './remark-config.js';
 import { HIDDEN_MDAST_TYPES } from './mapping.js';
 
 const BOM = '﻿';
@@ -79,7 +78,7 @@ export function inferOptions(raw) {
  * @param {string} styleSource The block it replaces, or the whole document for a new one
  */
 export function restyle(text, styleSource) {
-  return toMarkdown(fromMarkdown(text, parseOptions()), {
+  return toMarkdown(parseMarkdown(text), {
     extensions: serializeExtensions(),
     ...inferOptions(styleSource),
   });
@@ -110,7 +109,7 @@ export class MdDoc {
     this.eol = raw.includes('\r\n') ? '\r\n' : '\n';
     this.body = raw.replace(/\r\n/g, '\n');
 
-    this.tree = fromMarkdown(this.body, parseOptions());
+    this.tree = parseMarkdown(this.body);
 
     /** @type {{node:object,start:number,end:number,hidden:boolean,precedingVisible:number}[]} */
     this.blocks = [];

@@ -38,10 +38,17 @@ export class DocumentSession {
     this.mappingError = null;
   }
 
-  /** Call once the editor exists: capture baseline nodes and build the mapping. */
-  attach(ctx) {
+  /**
+   * Call once the editor exists: capture baseline nodes and build the mapping.
+   * @param {any} ctx Milkdown ctx (for the serializer)
+   * @param {() => import('@milkdown/prose/view').EditorView} [getView] The view whose
+   *   document this session tracks. Defaults to the main editor; a toggle body or a
+   *   column passes its own nested view (app/editor/containers.js).
+   */
+  attach(ctx, getView = this.getView ?? (() => ctx.get(editorViewCtx))) {
     this.ctx = ctx;
-    const doc = ctx.get(editorViewCtx).state.doc;
+    this.getView = getView;
+    const doc = getView().state.doc;
     this.baselineNodes = [];
     const types = [];
     doc.forEach((n) => {
@@ -59,7 +66,7 @@ export class DocumentSession {
   /** Current top-level nodes of the editor document. */
   currentNodes() {
     const nodes = [];
-    this.ctx.get(editorViewCtx).state.doc.forEach((n) => nodes.push(n));
+    this.getView().state.doc.forEach((n) => nodes.push(n));
     return nodes;
   }
 
@@ -69,7 +76,7 @@ export class DocumentSession {
    * @param {string} styleSource Original text whose style to follow (see `restyle`)
    */
   serializeNode(node, styleSource = this.doc.body) {
-    const schema = this.ctx.get(editorViewCtx).state.schema;
+    const schema = this.getView().state.schema;
     const serialize = this.ctx.get(serializerCtx);
     const wrapper = schema.nodes.doc.create(null, [node]);
     // Callout markers last: restyle() prints `[!NOTE]` escaped again.
@@ -95,6 +102,15 @@ export class DocumentSession {
       out.set(slot, this.doc.sourceOf(this.mapping.pmToBlock[free[k]]));
     });
     return out;
+  }
+
+  /**
+   * Serialize the whole document, block by block. Only for a toggle body or column
+   * whose blocks can't be mapped (an empty one has none) — never the main document,
+   * where an unmappable state must refuse to save instead (see save()).
+   */
+  serializeAll() {
+    return this.currentNodes().map((n) => this.serializeNode(n)).filter((s) => s.trim()).join('\n\n');
   }
 
   /**
@@ -154,6 +170,6 @@ export class DocumentSession {
   commit(newSource) {
     this.source = newSource;
     this.doc = new MdDoc(newSource);
-    return this.attach(this.ctx);
+    return this.attach(this.ctx, this.getView);
   }
 }

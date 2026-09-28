@@ -21,9 +21,9 @@
     { "id": "image-web", "area": "Blocks", "feature": "Image from the web", "status": "must", "check": "render-image-web" },
     { "id": "equation-block", "area": "Blocks", "feature": "Block equation", "status": "must", "check": "render-math-block", "note": "`$$ … $$`, which GitHub renders" },
     { "id": "equation-edit", "area": "Blocks", "feature": "Insert an equation from / and edit its TeX by clicking it", "status": "must", "check": "math-edit" },
-    { "id": "toggle", "area": "Blocks", "feature": "Toggle list", "status": "planned", "note": "Storable as HTML `<details><summary>`, which GitHub renders; needs a new node type and remark config (iron rule 2)" },
-    { "id": "columns", "area": "Blocks", "feature": "Columns (blocks side by side)", "status": "planned", "note": "ADR-004: v1 read-only atomic block, v2 custom schema" },
-    { "id": "media-links", "area": "Blocks", "feature": "Video, audio, file, PDF, bookmark", "status": "planned", "note": "Markdown can only store these as links; a nicer rendering of such links is possible" },
+    { "id": "toggle", "area": "Blocks", "feature": "Toggle list: open and close it, edit its title and contents", "status": "must", "check": "toggle", "note": "Stored as HTML <details><summary>, which GitHub renders as a toggle" },
+    { "id": "columns", "area": "Blocks", "feature": "Columns (blocks side by side), editable", "status": "must", "check": "columns", "note": "ADR-004 <div class=bmd-row>; other editors show the columns stacked. Dragging blocks between columns is not built" },
+    { "id": "media-links", "area": "Blocks", "feature": "Video, audio, PDF and web bookmark previews", "status": "must", "check": "media", "note": "Stored as a plain link on its own line" },
     { "id": "toc", "area": "Blocks", "feature": "Table of contents", "status": "wontdo", "note": "No Markdown syntax; `[TOC]` is non-standard and would show as text everywhere else" },
     { "id": "database", "area": "Blocks", "feature": "Databases (table, board, gallery, list, calendar views)", "status": "wontdo", "note": "No Markdown representation" },
     { "id": "synced", "area": "Blocks", "feature": "Synced blocks, link to page, breadcrumb, button, template", "status": "wontdo", "note": "Need block IDs or page hierarchy stored in the file" },
@@ -38,7 +38,7 @@
     { "id": "underline", "area": "Inline", "feature": "Underline", "status": "wontdo", "note": "No Markdown syntax" },
     { "id": "color", "area": "Inline", "feature": "Text colour and highlight", "status": "wontdo", "note": "No Markdown syntax" },
     { "id": "mentions", "area": "Inline", "feature": "@-mentions, dates, reminders", "status": "wontdo", "note": "Need a user or page database" },
-    { "id": "emoji-picker", "area": "Inline", "feature": "Emoji picker (`:` or /emoji)", "status": "planned", "note": "Stored as the emoji character, so fully storable" },
+    { "id": "emoji-picker", "area": "Inline", "feature": "Emoji picker (`:word` or /emoji)", "status": "must", "check": "emoji", "note": "Stored as the emoji character" },
 
     { "id": "md-bold", "area": "Markdown shortcuts", "feature": "**text** makes bold", "status": "must", "check": "shortcut-inline-bold" },
     { "id": "md-italic", "area": "Markdown shortcuts", "feature": "*text* makes italic", "status": "must", "check": "shortcut-inline-italic" },
@@ -62,7 +62,7 @@
     { "id": "kb-underline", "area": "Keyboard", "feature": "Ctrl+U underline", "status": "wontdo", "note": "No Markdown underline" },
     { "id": "kb-undo", "area": "Keyboard", "feature": "Ctrl+Z undo, Ctrl+Shift+Z / Ctrl+Y redo", "status": "must", "check": "key-undo-redo" },
     { "id": "kb-indent", "area": "Keyboard", "feature": "Tab / Shift+Tab nest and un-nest list items", "status": "must", "check": "key-indent" },
-    { "id": "kb-turn-into", "area": "Keyboard", "feature": "Ctrl+Shift+0…8 turn into text, H1–H3, to-do, bullet, number, (toggle), code", "status": "must", "check": "key-turn-into" },
+    { "id": "kb-turn-into", "area": "Keyboard", "feature": "Ctrl+Shift+0…8 turn into text, H1–H3, to-do, bullet, number, toggle, code", "status": "must", "check": "key-turn-into" },
     { "id": "kb-duplicate", "area": "Keyboard", "feature": "Ctrl+D duplicate block", "status": "must", "check": "key-duplicate" },
     { "id": "kb-move", "area": "Keyboard", "feature": "Ctrl+Shift+↑/↓ move block", "status": "must", "check": "key-move" },
     { "id": "kb-select-delete", "area": "Keyboard", "feature": "Esc selects the block, Backspace deletes it", "status": "must", "check": "key-select-delete" },
@@ -77,9 +77,9 @@
     { "id": "format-toolbar", "area": "Interaction", "feature": "Selecting text shows a formatting toolbar", "status": "must", "check": "format-toolbar" },
     { "id": "paste-markdown", "area": "Interaction", "feature": "Pasting Markdown text creates the matching blocks", "status": "must", "check": "paste-markdown" },
     { "id": "dark-mode", "area": "Interaction", "feature": "Dark mode", "status": "must", "check": "dark-mode", "note": "Follows the system setting" },
-    { "id": "image-paste", "area": "Interaction", "feature": "Paste or drop an image file", "status": "planned", "note": "Needs to write the image next to the .md file; a design decision about where" },
-    { "id": "multi-select", "area": "Interaction", "feature": "Select several blocks and move / delete them together", "status": "planned" },
-    { "id": "typography", "area": "Interaction", "feature": "Page style: serif / mono font, small text, full width", "status": "planned", "note": "An app setting, not stored in the file" },
+    { "id": "image-paste", "area": "Interaction", "feature": "Paste or drop an image file", "status": "must", "check": "image-paste", "note": "Saved to assets/ next to the .md. The check covers paste; a drop from Explorer goes through the same code but cannot be simulated over CDP" },
+    { "id": "multi-select", "area": "Interaction", "feature": "Select several blocks and move / delete / duplicate / copy them together", "status": "must", "check": "multi-select", "note": "Esc, then Shift+↑/↓ or Shift+click a handle. Dragging several blocks at once is not built" },
+    { "id": "typography", "area": "Interaction", "feature": "Page style: serif / mono font, small text, full width", "status": "must", "check": "page-style", "note": "An app setting, not stored in the file" },
     { "id": "comments", "area": "Interaction", "feature": "Comments and suggested edits", "status": "wontdo", "note": "No Markdown representation" }
   ]
 }

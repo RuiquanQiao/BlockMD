@@ -17,7 +17,7 @@
  * "must" feature fails or has no check.
  */
 
-import { writeFileSync, mkdirSync, copyFileSync, readFileSync } from 'node:fs';
+import { writeFileSync, mkdirSync, copyFileSync, readFileSync, rmSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, execSync } from 'node:child_process';
@@ -36,13 +36,38 @@ const J = JSON.stringify;
 
 mkdirSync(join(WORK, 'img'), { recursive: true });
 copyFileSync(join(ROOT, 'src-tauri/icons/32x32.png'), join(WORK, 'img/dot.png'));
+// Media for the preview checks: a 0.2 s 440 Hz tone and a one-page PDF, made here so
+// no binary fixtures live in the repository.
+mkdirSync(join(WORK, 'media'), { recursive: true });
+{
+  const rate = 8000, n = rate / 5, data = Buffer.alloc(n * 2);
+  for (let i = 0; i < n; i++) data.writeInt16LE(Math.round(8000 * Math.sin((2 * Math.PI * 440 * i) / rate)), i * 2);
+  const head = Buffer.alloc(44);
+  head.write('RIFF', 0); head.writeUInt32LE(36 + data.length, 4); head.write('WAVEfmt ', 8);
+  head.writeUInt32LE(16, 16); head.writeUInt16LE(1, 20); head.writeUInt16LE(1, 22); head.writeUInt32LE(rate, 24);
+  head.writeUInt32LE(rate * 2, 28); head.writeUInt16LE(2, 32); head.writeUInt16LE(16, 34); head.write('data', 36); head.writeUInt32LE(data.length, 40);
+  writeFileSync(join(WORK, 'media/beep.wav'), Buffer.concat([head, data]));
+  const objs = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
+    '<< /Length 44 >>\nstream\nBT /F1 18 Tf 20 40 Td (BlockMD PDF) Tj ET\nendstream', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'];
+  let pdf = '%PDF-1.4\n';
+  const offs = objs.map((o, i) => { const at = pdf.length; pdf += `${i + 1} 0 obj\n${o}\nendobj\n`; return at; });
+  const xref = pdf.length;
+  pdf += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + offs.map((o) => `${String(o).padStart(10, '0')} 00000 n \n`).join('') +
+    `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  writeFileSync(join(WORK, 'media/doc.pdf'), pdf);
+}
+// Images pasted by the image-paste check land here; start clean every run.
+rmSync(join(WORK, 'assets'), { recursive: true, force: true });
 
 /* ------------------------------------------------------------- the app */
 
 async function pageTarget() {
   try {
     const list = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json();
-    return list.find((t) => t.type === 'page' && t.webSocketDebuggerUrl) ?? null;
+    // The app's own page — not an embedded viewer (a PDF preview is a target of its own).
+    const pages = list.filter((t) => t.type === 'page' && t.webSocketDebuggerUrl);
+    return pages.find((t) => !t.url.startsWith('chrome-extension:')) ?? null;
   } catch {
     return null;
   }
@@ -138,13 +163,15 @@ const PAGE_HELPERS = `window.__parity = {
     return s.visibility !== 'hidden' && s.display !== 'none' && r.width > 0 && r.height > 0;
   },
   top() { const a = []; __bmd.view().state.doc.forEach((n) => a.push(n.type.name + (n.attrs.level ? n.attrs.level : ''))); return a; },
-  blockRect(i) { const r = __bmd.view().dom.children[i].getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height, bottom: r.bottom }; },
+  // Through ProseMirror, not dom.children: preview widgets (media.js) sit between blocks.
+  blockDom(i) { const v = __bmd.view(); let pos = 0; for (let k = 0; k < i; k++) pos += v.state.doc.child(k).nodeSize; return v.nodeDOM(pos); },
+  blockRect(i) { const r = this.blockDom(i).getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height, bottom: r.bottom }; },
 }; true`;
 
 /* ------------------------------------------------------------- harness */
 
 const MODS = { Alt: 1, Ctrl: 2, Meta: 4, Shift: 8 };
-const NAMED = { Enter: 13, Tab: 9, Escape: 27, Backspace: 8, ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39, Delete: 46 };
+const NAMED = { Enter: 13, Tab: 9, Escape: 27, Backspace: 8, End: 35, Home: 36, ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39, Delete: 46 };
 
 function keyInfo(k, shift) {
   if (NAMED[k]) return { key: k, code: k, windowsVirtualKeyCode: NAMED[k] };
@@ -384,7 +411,7 @@ const checks = {
     expect(await ev(`!document.querySelector('.ProseMirror li li')`), 'Shift+Tab did not un-nest it');
   },
   async 'key-turn-into'() {
-    const cases = [['1', 'heading1'], ['2', 'heading2'], ['3', 'heading3'], ['0', 'paragraph'], ['4', 'todo'], ['5', 'bullet_list'], ['6', 'ordered_list'], ['8', 'code_block']];
+    const cases = [['1', 'heading1'], ['2', 'heading2'], ['3', 'heading3'], ['0', 'paragraph'], ['4', 'todo'], ['5', 'bullet_list'], ['6', 'ordered_list'], ['7', 'toggle'], ['8', 'code_block']];
     const failed = [];
     for (const [d, want] of cases) {
       await t.open('text\n'); await t.caret('text'); await t.key('Ctrl+Shift+' + d);
@@ -410,6 +437,110 @@ const checks = {
   },
   async 'key-block-menu'() { await t.open('a\n'); await t.caret('a'); await t.key('Ctrl+/'); expect(await t.vis('.bmd-menu'), 'Ctrl+/ did not open the block menu'); await t.key('Escape'); },
   async 'key-find'() { await t.open('a\n'); await t.caret('a'); await t.key('Ctrl+F'); expect(await t.vis('.bmd-find input'), 'Ctrl+F did not open find'); await t.key('Escape'); },
+
+  /* Containers, media, emoji, images, multi-select, page style */
+  async 'toggle'() {
+    await t.open();
+    const state = () => ev(`(() => { const e = document.querySelector('.bmd-toggle'); return e && { open: e.dataset.open, title: e.querySelector('.bmd-toggle-summary').textContent, body: __parity.visible(e.querySelector('.bmd-toggle-body')) }; })()`);
+    const s0 = await state();
+    expect(s0 && s0.title === 'Toggle title' && s0.open === 'false' && !s0.body, 'toggle not rendered closed with its title: ' + J(s0));
+    const arrow = await ev(`(() => { const e = document.querySelector('.bmd-toggle-arrow'); e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+    await t.click(arrow.x, arrow.y);
+    expect((await state()).body && (await ev(`document.querySelector('.bmd-toggle-body').textContent.includes('Hidden text inside.')`)), 'clicking the arrow did not open the toggle');
+    // Type at the end of the body's paragraph, through the nested editor.
+    const end = await ev(`(() => { const p = document.querySelector('.bmd-toggle-body p'); const r = p.getBoundingClientRect(); return { x: r.right - 2, y: r.top + r.height / 2 }; })()`);
+    await t.click(end.x, end.y); await t.key('End'); await t.type('!');
+    expect((await t.save()) === FIXTURE.replace('Hidden text inside.', 'Hidden text inside.!'), 'editing inside the toggle changed more than its body');
+    // /toggle, then the title goes into the new toggle.
+    await t.newLine(); await t.type('/toggle'); await sleep(350); await t.key('Enter'); await sleep(250); await t.type('Title');
+    expect((await t.save()) === 'start\n\n<details>\n<summary>Title</summary>\n\n</details>\n', '/toggle saved as ' + J(await t.save()));
+  },
+  async 'columns'() {
+    await t.open();
+    const cols = await ev(`[...document.querySelectorAll('.bmd-columns .bmd-column')].map(c => { c.scrollIntoView({ block: 'center' }); const r = c.getBoundingClientRect(); return { x: r.left, y: r.top }; })`);
+    expect(cols.length === 2 && cols[1].x > cols[0].x + 100 && Math.abs(cols[1].y - cols[0].y) < 4, 'columns not side by side: ' + J(cols));
+    const end = await ev(`(() => { const p = document.querySelectorAll('.bmd-column')[1].querySelector('p'); const r = p.getBoundingClientRect(); return { x: r.right - 2, y: r.top + r.height / 2 }; })()`);
+    await t.click(end.x, end.y); await t.key('End'); await t.type('!');
+    expect((await t.save()) === FIXTURE.replace('Right column', 'Right column!'), 'editing the right column changed more than that column');
+    await t.newLine(); await t.type('/columns'); await sleep(350); await t.key('Enter'); await sleep(250);
+    expect(last(await t.top()) === 'column_row', '/2 columns did not insert columns');
+  },
+  async 'media'() {
+    // A preview must display, never download: an untyped blob in a frame once put a
+    // copy of the PDF into Downloads on every render. Count what lands there.
+    const downloads = join(process.env.USERPROFILE ?? process.env.HOME ?? '', 'Downloads');
+    const before = (() => { try { return readdirSync(downloads).length; } catch { return null; } })();
+    await t.open();
+    const bm = await ev(`(() => { const e = document.querySelector('.bmd-media-bookmark'); return e && e.querySelector('.bmd-bookmark-title').textContent; })()`);
+    expect(bm === 'BlockMD website', 'no bookmark card for a lone web link: ' + J(bm));
+    let audio = null;
+    for (let i = 0; i < 20 && !(audio?.ready >= 1); i++) {
+      await sleep(200);
+      audio = await ev(`(() => { const a = document.querySelector('.bmd-media-audio audio'); return a && { ready: a.readyState, error: a.error && a.error.code }; })()`);
+    }
+    expect(audio && audio.ready >= 1 && !audio.error, 'local audio did not load: ' + J(audio));
+    expect(await ev(`(document.querySelector('.bmd-media-pdf iframe')?.src ?? '').startsWith('blob:')`), 'no PDF preview');
+    expect((await t.save()) === FIXTURE, 'previews changed the saved file');
+    await sleep(1500);
+    const after = (() => { try { return readdirSync(downloads).length; } catch { return null; } })();
+    expect(before === null || after === before, `a preview started a download (${after - before} new file(s) in Downloads)`);
+    const prompt = (await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json()).some((x) => x.url.startsWith('edge://permission'));
+    expect(!prompt, 'the page raised a permission prompt');
+  },
+  async 'emoji'() {
+    await t.newLine(); await t.type('hi :smi'); await sleep(150);
+    expect(await t.vis('.bmd-emoji'), ':smi did not open the emoji picker');
+    await t.key('Enter');
+    const text = await ev(`__bmd.view().state.doc.lastChild.textContent`);
+    expect(/^hi \p{Extended_Pictographic}/u.test(text) && !text.includes(':'), 'Enter did not insert an emoji: ' + J(text));
+    await t.newLine(); await t.type('/emoji'); await sleep(350); await t.key('Enter'); await sleep(200);
+    expect(await t.vis('.bmd-emoji'), '/emoji did not open the picker');
+    await t.key('Escape');
+  },
+  async 'image-paste'() {
+    await t.newLine();
+    const b64 = readFileSync(join(ROOT, 'src-tauri/icons/32x32.png')).toString('base64');
+    await ev(`(() => { const bin = atob(${J(b64)}); const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+      const dt = new DataTransfer(); dt.items.add(new File([bytes], 'image.png', { type: 'image/png' }));
+      __bmd.view().dom.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); })()`);
+    await sleep(800);
+    let saved = [];
+    try { saved = readdirSync(join(WORK, 'assets')); } catch { /* not created */ }
+    expect(saved.length === 1 && /^image-\d{8}-\d{6}\.png$/.test(saved[0]), 'pasted image not saved to assets/: ' + J(saved));
+    const w = await ev(`document.querySelector('.ProseMirror img[data-src^="assets/"]')?.naturalWidth ?? -1`);
+    expect(w > 0, 'pasted image not shown');
+    expect((await t.save()) === `start\n\n![](assets/${saved[0]})\n`, 'pasted image saved as ' + J(await t.save()));
+  },
+  async 'multi-select'() {
+    await t.open('a\n\nb\n\nc\n\nd\n'); await t.caret('b'); await t.key('Escape'); await t.key('Shift+ArrowDown');
+    expect((await ev(`document.querySelectorAll('.bmd-block-selected').length`)) === 2, 'Shift+↓ did not select two blocks');
+    await t.key('Ctrl+Shift+ArrowUp');
+    expect((await t.save()) === 'b\n\nc\n\na\n\nd\n', 'Ctrl+Shift+↑ did not move both blocks: ' + J(await t.save()));
+    await t.key('Ctrl+D');
+    expect((await t.save()) === 'b\n\nc\n\nb\n\nc\n\na\n\nd\n', 'Ctrl+D did not duplicate both blocks: ' + J(await t.save()));
+    await t.key('Backspace');
+    expect((await t.save()) === 'b\n\nc\n\na\n\nd\n', 'Backspace did not delete both blocks: ' + J(await t.save()));
+  },
+  async 'page-style'() {
+    await t.open('Some text.\n');
+    const centre = (sel) => ev(`(() => { const r = document.querySelector(${J(sel)}).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+    const b = await centre('#btn-style');
+    await t.click(b.x, b.y);
+    expect(await t.vis('.bmd-style-menu'), 'the ··· button did not open the style menu');
+    const clickIn = async (sel) => { const r = await centre(sel); await t.click(r.x, r.y); };
+    try {
+      await clickIn('[data-font="serif"]');
+      expect(/Georgia/.test(await ev(`getComputedStyle(document.querySelector('.ProseMirror')).fontFamily`)), 'Serif did not change the font');
+      await clickIn('[data-toggle="wide"]');
+      expect((await ev(`document.querySelector('.editor-host').getBoundingClientRect().width`)) > 1000, 'Full width did not widen the page');
+      await clickIn('[data-toggle="small"]');
+      expect((await ev(`getComputedStyle(document.querySelector('.milkdown')).fontSize`)) === '14px', 'Small text did not shrink the text');
+      expect((await t.save()) === 'Some text.\n', 'page style changed the file');
+    } finally {
+      await ev(`(() => { try { localStorage.removeItem('bmd.pageStyle'); } catch {} document.documentElement.classList.remove('style-serif', 'style-mono', 'style-small', 'style-wide'); })()`);
+      await t.key('Escape');
+    }
+  },
 
   /* Interaction */
   async 'slash-menu'() {

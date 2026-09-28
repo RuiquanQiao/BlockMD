@@ -27,7 +27,8 @@ if (!expression) {
 async function pageTarget() {
   const res = await fetch(`http://127.0.0.1:${PORT}/json/list`);
   const targets = await res.json();
-  const page = targets.find((t) => t.type === 'page' && t.webSocketDebuggerUrl);
+  // The app's own page — not an embedded viewer (a PDF preview is a target of its own).
+  const page = targets.find((t) => t.type === 'page' && t.webSocketDebuggerUrl && !t.url.startsWith('chrome-extension:'));
   if (!page) throw new Error('no debuggable page found — is the app running with --remote-debugging-port?');
   return page;
 }

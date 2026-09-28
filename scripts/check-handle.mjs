@@ -31,7 +31,7 @@ const WIDTHS = (process.env.BMD_WIDTHS ?? '1400,1000,760,620').split(',').map(Nu
 
 async function connect() {
   const res = await fetch(`http://127.0.0.1:${PORT}/json/list`);
-  const page = (await res.json()).find((t) => t.type === 'page' && t.webSocketDebuggerUrl);
+  const page = (await res.json()).find((t) => t.type === 'page' && t.webSocketDebuggerUrl && !t.url.startsWith('chrome-extension:'));
   if (!page) throw new Error('no debuggable page — start the app with npm run desktop:debug');
 
   const ws = new WebSocket(page.webSocketDebuggerUrl);

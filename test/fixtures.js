@@ -127,6 +127,21 @@ export const fixtures = [
     why: 'math is its own block type once remark-math is on: both sides must agree, or every block after it shifts',
     src: 'Inline $E=mc^2$ and $$x$$ in text.\n\n$$\na^2 + b^2 = c^2\n$$\n\nIt costs $5 and $10.\n\n$$ \\sum_{i=1}^n i $$\n\nAfter the math.\n',
   },
+  {
+    name: '24-toggle',
+    why: 'a <details> toggle is three or more sibling mdast nodes; both sides must group them into one block',
+    src: 'Before.\n\n<details>\n<summary>Click to open</summary>\n\nHidden **bold** text.\n\n- a\n- b\n\n</details>\n\n<details open>\n<summary>Open &amp; shut</summary>\n\n</details>\n\nAfter.\n',
+  },
+  {
+    name: '25-columns',
+    why: 'ADR-004 columns: html dividers with blank lines, content in between; grouped into one block on both sides',
+    src: '# Two columns\n\n<div class="bmd-row">\n<div class="bmd-col">\n\nLeft *side*.\n\n```js\nx = 1\n```\n\n</div>\n<div class="bmd-col">\n\n- right\n- list\n\n</div>\n</div>\n\nAfter.\n',
+  },
+  {
+    name: '26-containers-malformed',
+    why: 'an unclosed <details> and a stray bmd-col must stay raw HTML, not swallow the rest of the file',
+    src: '<details>\n<summary>Never closed</summary>\n\nText.\n\n<div class="bmd-col">\n\nStray.\n\n</div>\n\nEnd.\n',
+  },
 ];
 
 /** Look up a fixture by name. */
