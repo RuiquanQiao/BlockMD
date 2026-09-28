@@ -54,5 +54,12 @@
   DeleteRegValue HKLM "Software\RegisteredApplications" "BlockMD"
   DeleteRegKey HKLM "Software\BlockMD"
 
+  ; Tauri's own APP_ASSOCIATE (FileAssociation.nsh) saves the previous handler of each
+  ; extension as "<ProgId>_backup", and its APP_UNASSOCIATE reads that value back to
+  ; restore it — but never deletes it. Caught by installer-audit on a clean runner.
+  ; Safe to delete here: this hook runs after APP_UNASSOCIATE has already used it.
+  DeleteRegValue HKLM "Software\Classes\.md" "BlockMD.md_backup"
+  DeleteRegValue HKLM "Software\Classes\.markdown" "BlockMD.md_backup"
+
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'
 !macroend
