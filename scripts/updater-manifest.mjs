@@ -26,8 +26,18 @@ const gh = (...args) => execFileSync('gh', args, { encoding: 'utf8' });
 // Scratch space inside the checkout (git-ignored), not the system temp folder.
 const WORK = join(fileURLToPath(new URL('..', import.meta.url)), '.cache', 'updater-manifest');
 
-// `gh release view` also finds drafts, which the releases/tags API endpoint does not.
-const release = JSON.parse(gh('release', 'view', tag, '--repo', repo, '--json', 'assets,body'));
+// The release for this tag, found in the list (the releases/tags endpoint can't see
+// drafts). Several releases for one tag — v0.1.5 once had two drafts — is an error,
+// not something to guess about; RELEASE_ID picks one explicitly.
+const all = JSON.parse(gh('api', `repos/${repo}/releases?per_page=100`));
+const matching = all.filter((r) => r.tag_name === tag);
+const release = process.env.RELEASE_ID
+  ? all.find((r) => String(r.id) === process.env.RELEASE_ID)
+  : matching.length === 1 ? matching[0] : null;
+if (!release) {
+  console.error(`${matching.length} releases for ${tag} (ids ${matching.map((r) => r.id).join(', ')}); set RELEASE_ID to choose one.`);
+  process.exit(1);
+}
 const assets = new Map(release.assets.map((a) => [a.name, a]));
 
 /** Updater target → the bundle the updater downloads for it. */
@@ -46,9 +56,9 @@ try {
   for (const [target, pattern] of TARGETS) {
     const bundle = [...assets.keys()].find((n) => pattern.test(n));
     if (!bundle || !assets.has(`${bundle}.sig`)) { missing.push(target); continue; }
-    gh('release', 'download', tag, '--repo', repo, '--pattern', `${bundle}.sig`, '--dir', dir, '--clobber');
+    const sig = execFileSync('gh', ['api', '-H', 'Accept: application/octet-stream', `repos/${repo}/releases/assets/${assets.get(`${bundle}.sig`).id}`]);
     platforms[target] = {
-      signature: readFileSync(join(dir, `${bundle}.sig`), 'utf8').trim(),
+      signature: sig.toString('utf8').trim(),
       url: `https://github.com/${repo}/releases/download/${tag}/${encodeURIComponent(bundle)}`,
     };
   }
@@ -79,6 +89,11 @@ if (flag === '--dry') {
 } else {
   const out = join(WORK, 'latest.json');
   writeFileSync(out, json);
-  gh('release', 'upload', tag, out, '--repo', repo, '--clobber');
-  console.log(`latest.json uploaded to ${tag}: ${Object.keys(platforms).join(', ')}`);
+  // Into this release by id (a tag can be ambiguous between drafts), replacing any
+  // earlier manifest in it.
+  const old = assets.get('latest.json');
+  if (old) gh('api', '--method', 'DELETE', `repos/${repo}/releases/assets/${old.id}`);
+  gh('api', '--method', 'POST', `https://uploads.github.com/repos/${repo}/releases/${release.id}/assets?name=latest.json`,
+    '-H', 'Content-Type: application/json', '--input', out);
+  console.log(`latest.json uploaded to ${tag} (release ${release.id}): ${Object.keys(platforms).join(', ')}`);
 }

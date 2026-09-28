@@ -14,8 +14,34 @@ permissions:
   contents: write
 
 jobs:
+  # One draft release, created before any build starts. When each build job created
+  # it on demand, jobs starting together each made their own: v0.1.5 had two drafts,
+  # and the Intel Mac files went to the one nobody published. (A draft can't be found
+  # by its tag, so tauri-action couldn't see that another job had already made it.)
+  draft:
+    name: Create the draft release
+    runs-on: ubuntu-latest
+    outputs:
+      id: ${{ steps.draft.outputs.id }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          # Reuse the draft on a re-run; otherwise create it.
+          id=$(gh api "repos/${{ github.repository }}/releases" --jq ".[] | select(.tag_name == \"$TAG\" and .draft) | .id" | head -n 1)
+          if [ -z "$id" ]; then
+            gh release create "$TAG" --draft --verify-tag --title "BlockMD $TAG" --notes-file .github/release-notes.md
+            id=$(gh api "repos/${{ github.repository }}/releases" --jq ".[] | select(.tag_name == \"$TAG\" and .draft) | .id" | head -n 1)
+          fi
+          test -n "$id"
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
   installers:
     name: ${{ matrix.label }}
+    needs: draft
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -76,38 +102,8 @@ jobs:
         with:
           includeUpdaterJson: false
           args: ${{ matrix.args }}
-          tagName: ${{ github.ref_name }}
-          releaseName: 'BlockMD ${{ github.ref_name }}'
-          # Written as a draft so the notes can be edited before anyone sees it.
-          releaseDraft: true
-          prerelease: false
-          releaseBody: |
-            Download the installer for your platform below. If you already have
-            BlockMD 0.1.1 or later, it offers this update by itself when you open it.
-
-            **Windows** — two installers are published and they register BlockMD
-            identically; pick either. `-setup.exe` (NSIS) is the smaller one and the
-            normal choice. `.msi` is for unattended or managed deployment
-            (`msiexec /i BlockMD_x64_en-US.msi /qn`).
-
-            Both register BlockMD as a handler for `.md` and `.markdown`. Windows will
-            not let an installer take the default file association, so to get
-            double-click opening: right-click any `.md` → Open with → Choose another
-            app → BlockMD → *Always use this app*.
-
-            Two things worth knowing before you install:
-
-            - **The installer needs an internet connection** if the Microsoft Edge
-              WebView2 runtime is not already present. It is preinstalled on Windows 11
-              and on most Windows 10 machines. Bundling it offline would add ~130 MB to
-              a 2 MB installer, which is not a trade we are willing to make.
-            - **After uninstalling**, if you had set BlockMD as your default `.md` app,
-              Windows may still point `.md` at it. That choice lives in a hash-protected
-              per-user key that belongs to you, not to our uninstaller, so we do not
-              touch it. Pick a new default under Settings → Apps → Default apps.
-
-            **macOS** — the build is unsigned, so the first launch needs
-            right-click → Open.
+          # Upload into the one draft made above (notes: .github/release-notes.md).
+          releaseId: ${{ needs.draft.outputs.id }}
 
   # Runs once, after every platform has uploaded its signed bundle. Refuses to write a
   # manifest with a platform missing, so a half-built release can't strand anyone.
