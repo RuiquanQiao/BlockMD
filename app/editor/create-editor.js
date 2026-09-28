@@ -32,6 +32,7 @@ import { containerViewsPlugin } from './containers.js';
 import { mediaPlugin } from './media.js';
 import { emojiPlugin } from './emoji.js';
 import { blockSelectPlugin } from './select.js';
+import { clipboardExtrasPlugin } from './clipboard-extras.js';
 
 /**
  * @param {object} opts
@@ -104,6 +105,8 @@ function buildEditor({ root, value, onChange }) {
     .use(taskListPlugin)
     .use(imagePlugin)
     // Pasted text is parsed as Markdown, so pasting a README gives blocks, not one paragraph.
+    // Before clipboard: Paste as Plain Text must see the paste before it is parsed.
+    .use(clipboardExtrasPlugin)
     .use(clipboard)
     // Before keymapPlugin: while open, the picker and a block range own the keys they use.
     .use(emojiPlugin)

@@ -26,9 +26,20 @@ function apply(style) {
   root.classList.toggle('style-wide', style.wide);
 }
 
+let style = load();
+
+/** Current page style, for the View ▸ Page Style menu. */
+export const pageStyle = () => ({ ...style });
+
+/** Change the page style (from the ··· menu or View ▸ Page Style). */
+export function setPageStyle(patch) {
+  style = { ...style, ...patch };
+  store(style);
+  apply(style);
+}
+
 /** @param {HTMLButtonElement} button The "···" button in the top bar */
 export function setUpPageStyle(button) {
-  let style = load();
   apply(style);
 
   const menu = document.createElement('div');
@@ -51,9 +62,7 @@ export function setUpPageStyle(button) {
     `<span>${label}</span><span class="bmd-switch${style[id] ? ' is-on' : ''}"></span></button>`;
 
   function set(patch) {
-    style = { ...style, ...patch };
-    store(style);
-    apply(style);
+    setPageStyle(patch);
     render();
   }
 

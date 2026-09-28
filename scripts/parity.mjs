@@ -17,7 +17,7 @@
  * "must" feature fails or has no check.
  */
 
-import { writeFileSync, mkdirSync, copyFileSync, readFileSync, rmSync, readdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, copyFileSync, readFileSync, rmSync, readdirSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, execSync } from 'node:child_process';
@@ -57,6 +57,14 @@ mkdirSync(join(WORK, 'media'), { recursive: true });
     `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
   writeFileSync(join(WORK, 'media/doc.pdf'), pdf);
 }
+// Files for the editor-baseline checks, written fresh by each check.
+rmSync(join(WORK, 'files'), { recursive: true, force: true });
+mkdirSync(join(WORK, 'files'), { recursive: true });
+function file(name, text) {
+  const p = join(WORK, 'files', name).replace(/\\/g, '/');
+  writeFileSync(p, text);
+  return p;
+}
 // Images pasted by the image-paste check land here; start clean every run.
 rmSync(join(WORK, 'assets'), { recursive: true, force: true });
 
@@ -87,6 +95,8 @@ if (!(await pageTarget())) {
       ...process.env,
       WEBVIEW2_USER_DATA_FOLDER: join(ROOT, '.cache', 'wv2'),
       WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${PORT}`,
+      // No native dialogs from the first page load on (app/platform.js `stub`).
+      VITE_BMD_NO_DIALOGS: '1',
     },
   });
 }
@@ -139,6 +149,12 @@ for (let i = 0; i < 60; i++) {
 }
 await send('Emulation.setDeviceMetricsOverride', { width: 1100, height: 800, deviceScaleFactor: 1, mobile: false });
 
+// No native dialog may open while checks run (platform.js `stub`): nothing can click
+// one, and the page freezes behind it. Also start from a clean slate — a leftover
+// draft or last-file would otherwise change what the app does on the next reload.
+const DEV_KEYS = ['bmd.draft', 'bmd.lastFile', 'bmd.devConfirm', 'bmd.devBlocked'];
+await ev(`(() => { localStorage.setItem('bmd.devNoDialogs', '1'); for (const k of ${J(DEV_KEYS)}) localStorage.removeItem(k); })()`);
+
 /** Helpers that run inside the page. */
 const PAGE_HELPERS = `window.__parity = {
   view: () => __bmd.view(),
@@ -171,11 +187,13 @@ const PAGE_HELPERS = `window.__parity = {
 /* ------------------------------------------------------------- harness */
 
 const MODS = { Alt: 1, Ctrl: 2, Meta: 4, Shift: 8 };
-const NAMED = { Enter: 13, Tab: 9, Escape: 27, Backspace: 8, End: 35, Home: 36, ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39, Delete: 46 };
+const NAMED = { Enter: 13, Tab: 9, Escape: 27, Backspace: 8, End: 35, Home: 36, F3: 114, F11: 122, ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39, Delete: 46 };
 
 function keyInfo(k, shift) {
   if (NAMED[k]) return { key: k, code: k, windowsVirtualKeyCode: NAMED[k] };
   if (k === '/') return { key: '/', code: 'Slash', windowsVirtualKeyCode: 191 };
+  if (k === 'Equal') return { key: shift ? '+' : '=', code: 'Equal', windowsVirtualKeyCode: 187 };
+  if (k === 'Minus') return { key: shift ? '_' : '-', code: 'Minus', windowsVirtualKeyCode: 189 };
   if (/^[a-z]$/i.test(k)) {
     const u = k.toUpperCase();
     return { key: shift ? u : u.toLowerCase(), code: 'Key' + u, windowsVirtualKeyCode: u.charCodeAt(0) };
@@ -219,11 +237,73 @@ const t = {
   async mouse(type, x, y, extra = {}) {
     await send('Input.dispatchMouseEvent', { type, x, y, button: 'left', buttons: type === 'mousePressed' ? 1 : 0, clickCount: 1, ...extra });
   },
+  /**
+   * Move the pointer in a straight line, in steps, the way a hand does. Teleporting
+   * the mouse hid a menu bug: a diagonal path crosses other rows on its way.
+   */
+  async glide(from, to, steps = 12) {
+    for (let i = 1; i <= steps; i++) {
+      await t.mouse('mouseMoved', from.x + ((to.x - from.x) * i) / steps, from.y + ((to.y - from.y) * i) / steps);
+      await sleep(12);
+    }
+    await sleep(250);
+  },
   async hover(x, y) { await t.mouse('mouseMoved', x, y); await sleep(60); await t.mouse('mouseMoved', x + 1, y); await sleep(250); },
   async click(x, y) { await t.mouse('mouseMoved', x, y); await t.mouse('mousePressed', x, y); await t.mouse('mouseReleased', x, y); await sleep(200); },
   /** Start a new empty paragraph after a one-line document. */
   async newLine() { await t.open('start\n'); await t.caret('start'); await t.key('Enter'); },
   save: () => ev('__bmd.session.save()'),
+  /** Reload the app (a fresh launch as far as the page is concerned) and wait for it. */
+  async reload() {
+    await ev('location.reload()').catch(() => {});
+    await sleep(1500);
+    for (let i = 0; i < 40; i++) {
+      if (await ev('typeof window.__bmd === "object" && !!window.__bmd.session').catch(() => false)) break;
+      await sleep(250);
+    }
+    await sleep(400);
+    await ev(PAGE_HELPERS);
+    await send('Emulation.setDeviceMetricsOverride', { width: 1100, height: 800, deviceScaleFactor: 1, mobile: false });
+  },
+  /**
+   * Answer native dialogs for the next steps (see platform.js `stub`), recording what
+   * was asked in window.__asked. `answers` maps stub name → JS returning the answer.
+   */
+  async stub(answers) {
+    const body = Object.entries(answers).map(([k, v]) => `${J(k)}: (...a) => { __asked.push([${J(k)}, ...a]); return (${v}); }`).join(',');
+    await ev(`(() => { window.__asked = []; window.__bmdStub = { ${body} }; })()`);
+  },
+  asked: () => ev('window.__asked ?? []'),
+  /** Click File ▸ Save As… (and a third level: File ▸ Open Recent ▸ path). */
+  async menu(section, label, deep) {
+    const centre = (sel, text) => ev(`(() => { const e = [...document.querySelectorAll(${J(sel)})].find((x) => ${text ? `x.textContent.includes(${J(text)})` : 'true'} && __parity.visible(x)); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+    const b = await centre('#btn-menu');
+    await t.click(b.x, b.y);
+    const s = await centre(`.bmd-app-menu [data-section="${section}"]`);
+    expect(s, `menu has no ${section} section`);
+    await t.hover(s.x, s.y);
+    const item = await centre('.bmd-app-sub:not(.bmd-app-deep) .bmd-app-item', label);
+    expect(item, `${section} menu has no "${label}"`);
+    await t.glide(s, item);
+    expect(await ev(`[...document.querySelectorAll('.bmd-app-sub:not(.bmd-app-deep) .bmd-app-item')].some((e) => e.textContent.includes(${J(label)}) && __parity.visible(e))`),
+      `moving the pointer from ${section} to "${label}" lost the ${section} menu`);
+    if (!deep) { await t.click(item.x, item.y); await sleep(250); return; }
+    const d0 = await centre('.bmd-app-deep .bmd-app-item', deep);
+    expect(d0, `${section} ▸ ${label} did not open`);
+    await t.glide(item, d0);
+    const d = await centre('.bmd-app-deep .bmd-app-item', deep);
+    expect(d, `${section} ▸ ${label} has no "${deep}"`);
+    await t.click(d.x, d.y);
+    await sleep(250);
+  },
+  /** Between checks: close menus, drop stubs and dev answers, restore the viewport. */
+  async cleanup() {
+    await t.key('Escape');
+    await ev(`(() => { window.__bmdStub = null; try { localStorage.removeItem('bmd.devConfirm'); localStorage.removeItem('bmd.draft'); } catch {} })()`).catch(() => {});
+    await send('Emulation.setEmulatedMedia', { features: [] });
+    await send('Emulation.setDeviceMetricsOverride', { width: 1100, height: 800, deviceScaleFactor: 1, mobile: false });
+  },
+  title: () => ev('document.title'),
   top: () => ev('__parity.top()'),
   vis: (sel) => ev(`__parity.visible(${J(sel)})`),
   async shot(name) {
@@ -387,7 +467,7 @@ const checks = {
   /* Keyboard */
   ...Object.fromEntries([
     ['key-bold', 'Ctrl+B', 'strong'], ['key-italic', 'Ctrl+I', 'em'],
-    ['key-code', 'Ctrl+E', 'p > code'], ['key-strike', 'Ctrl+Shift+S', 'del, .ProseMirror s'],
+    ['key-code', 'Ctrl+E', 'p > code'], ['key-strike', 'Ctrl+Shift+X', 'del, .ProseMirror s'],
   ].map(([id, combo, sel]) => [id, async () => {
     await t.open('hello world\n'); await t.select('world'); await t.key(combo);
     expect((await ev(`document.querySelector('.ProseMirror ${sel}')?.textContent`)) === 'world', `${combo} did nothing`);
@@ -542,6 +622,264 @@ const checks = {
     }
   },
 
+  /* ——— Editor baseline (parity/editor.json) ——— */
+  async 'launch-untitled'() {
+    await ev(`(() => { for (const k of ['lastFile', 'draft', 'devConfirm']) localStorage.removeItem('bmd.' + k); })()`);
+    await t.reload();
+    const s = await ev(`({ name: __bmd.session.name, path: __bmd.path, text: __bmd.view().state.doc.textContent, status: document.getElementById('status-text').textContent })`);
+    expect(s.name === 'Untitled.md' && s.path === null && s.text === '' && s.status === 'New document', 'launch without a file: ' + J(s));
+  },
+  async 'launch-last'() {
+    const a = file('last.md', 'Reopen me.\n');
+    await t.stub({ pickOpenPath: J(a) });
+    await t.key('Ctrl+O'); await sleep(300);
+    await t.reload();
+    expect((await ev('__bmd.path')) === a, 'the last opened file was not reopened');
+    await t.reload();
+    expect((await ev('__bmd.session.name')) === 'Untitled.md', 'closing without doing anything did not give a new document next time');
+  },
+  async 'empty-file'() {
+    const p = file('empty.md', '');
+    await t.open(''); await ev(`__bmd.openPath(${J(p)})`); await ev(PAGE_HELPERS);
+    expect((await ev('__bmd.session.status().ok')), 'an empty file failed the mapping');
+    await ev('__bmd.view().focus()'); await t.type('Hello');
+    await t.key('Ctrl+S'); await sleep(300);
+    expect(readFileSync(p, 'utf8') === 'Hello', 'saved empty file contains ' + J(readFileSync(p, 'utf8')));
+  },
+  async 'new'() {
+    await t.open('Some text.\n'); await t.caret('text'); await t.type('!');
+    await t.stub({ confirm: 'true' });
+    await t.key('Ctrl+N'); await sleep(300);
+    const asked = await t.asked();
+    expect(asked.some(([k, m]) => k === 'confirm' && /unsaved changes/.test(m)), 'New did not ask about unsaved changes');
+    expect((await ev('__bmd.session.name')) === 'Untitled.md' && (await ev('__bmd.view().state.doc.textContent')) === '', 'New did not start an empty document');
+  },
+  async 'open'() {
+    const b = file('open-me.md', '# Opened\n');
+    await t.open('x\n'); await t.stub({ pickOpenPath: J(b) });
+    await t.key('Ctrl+O'); await sleep(300);
+    expect((await ev('__bmd.path')) === b && (await ev('__bmd.view().state.doc.textContent')) === 'Opened', 'Ctrl+O did not open the chosen file');
+  },
+  async 'open-recent'() {
+    const a = file('recent-a.md', 'A\n'), b = file('recent-b.md', 'B\n');
+    for (const p of [a, b]) { await t.stub({ pickOpenPath: J(p) }); await t.key('Ctrl+O'); await sleep(250); }
+    await t.menu('File', 'Open Recent', 'recent-a.md');
+    expect((await ev('__bmd.path')) === a, 'Open Recent did not open the file');
+    rmSync(b);
+    await t.menu('File', 'Open Recent', 'recent-b.md');
+    expect(!(await ev(`JSON.parse(localStorage.getItem('bmd.recent') || '[]').includes(${J(b)})`)), 'a missing file stayed in Open Recent');
+  },
+  async 'save'() {
+    const p = file('save.md', 'One.\n');
+    await t.open(''); await ev(`__bmd.openPath(${J(p)})`); await ev(PAGE_HELPERS);
+    await t.caret('One'); await t.type('!');
+    await sleep(400); // the editor reports changes in batches of ~200 ms
+    expect((await t.title()).includes('•'), 'the title shows no unsaved mark: ' + J(await ev(`({ title: document.title, dirty: __bmd.dirty, text: __bmd.view().state.doc.textContent, path: __bmd.path })`)));
+    const expected = await t.save();
+    await t.key('Ctrl+S'); await sleep(300);
+    expect(readFileSync(p, 'utf8') === expected, 'Ctrl+S did not write the document');
+    expect(!(await t.title()).includes('•'), 'the unsaved mark stayed after saving');
+  },
+  async 'save-untitled'() {
+    const p = join(WORK, 'files', 'saved-untitled.md').replace(/\\/g, '/');
+    rmSync(p, { force: true });
+    await t.stub({ confirm: 'true', pickSavePath: J(p) });
+    await t.key('Ctrl+N'); await sleep(300); await ev('__bmd.view().focus()'); await t.type('abc');
+    await t.key('Ctrl+S'); await sleep(400);
+    expect((await t.asked()).some(([k]) => k === 'pickSavePath'), 'saving an untitled document did not ask where');
+    expect(readFileSync(p, 'utf8') === 'abc' && (await ev('__bmd.session.name')) === 'saved-untitled.md', 'untitled save wrote ' + J(readFileSync(p, 'utf8')));
+  },
+  async 'save-as'() {
+    const a = file('orig.md', 'Original.\n');
+    const copy = join(WORK, 'files', 'copy.md').replace(/\\/g, '/');
+    rmSync(copy, { force: true });
+    await t.open(''); await ev(`__bmd.openPath(${J(a)})`); await ev(PAGE_HELPERS);
+    await t.caret('Original'); await t.type('!');
+    await t.stub({ pickSavePath: J(copy) });
+    await t.key('Ctrl+Shift+S'); await sleep(400);
+    expect(readFileSync(copy, 'utf8') === 'Original!.\n' && readFileSync(a, 'utf8') === 'Original.\n', 'Save As did not write only the copy');
+    expect((await ev('__bmd.path')) === copy, 'Save As did not continue in the new file');
+  },
+  async 'save-fails'() {
+    const p = file('readonly.md', 'Locked.\n');
+    chmodSync(p, 0o444);
+    try {
+      await t.open(''); await ev(`__bmd.openPath(${J(p)})`); await ev(PAGE_HELPERS);
+      await t.caret('Locked'); await t.type('!');
+      await t.key('Ctrl+S'); await sleep(400);
+      const status = await ev(`document.getElementById('status-text').textContent`);
+      expect(/Save failed/.test(status), 'no error for a failed save: ' + J(status));
+      expect(await ev('__bmd.dirty') && (await t.title()).includes('•'), 'a failed save was shown as saved');
+    } finally {
+      chmodSync(p, 0o666);
+    }
+  },
+  async 'disk-change'() {
+    const p = file('external.md', 'Before.\n');
+    await t.open(''); await ev(`__bmd.openPath(${J(p)})`); await ev(PAGE_HELPERS);
+    await sleep(50); writeFileSync(p, 'After.\n'); await ev('__bmd.checkDisk()'); await sleep(300);
+    expect((await ev('__bmd.view().state.doc.textContent')) === 'After.', 'a clean document was not reloaded after an outside change');
+    await t.caret('After'); await t.type('!');
+    await t.stub({ confirm: 'false' });
+    await sleep(50); writeFileSync(p, 'Third.\n'); await ev('__bmd.checkDisk()'); await sleep(300);
+    expect((await t.asked()).some(([k, m]) => k === 'confirm' && /changed by another program/.test(m)), 'no question about unsaved changes');
+    expect((await ev('__bmd.view().state.doc.textContent')) === 'After!.', 'unsaved changes were lost although "keep" was chosen');
+  },
+  async 'drafts'() {
+    const p = file('draft.md', 'Saved text.\n');
+    await t.open(''); await ev(`__bmd.openPath(${J(p)})`); await ev(PAGE_HELPERS);
+    await t.caret('Saved text'); await t.type(' plus unsaved');
+    await sleep(900); // drafts are written 600 ms after the last change
+    await ev(`localStorage.setItem('bmd.devConfirm', 'yes')`);
+    await t.reload(); // as if BlockMD had crashed: no save, no close
+    const s = await ev(`({ text: __bmd.view().state.doc.textContent, dirty: __bmd.dirty, path: __bmd.path })`);
+    expect(s.text === 'Saved text plus unsaved.' && s.dirty && s.path === p, 'unsaved changes were not offered back: ' + J(s));
+    await ev(`localStorage.removeItem('bmd.devConfirm')`);
+    await t.key('Ctrl+S'); await sleep(400);
+    expect(readFileSync(p, 'utf8') === 'Saved text plus unsaved.\n' && !(await ev(`localStorage.getItem('bmd.draft')`)), 'saving the recovered text did not write it and clear the draft');
+  },
+  async 'drop-md'() {
+    const p = file('dropped.md', '# Dropped\n');
+    await t.open('x\n');
+    await ev(`__bmd.drop({ path: ${J(p)}, name: 'dropped.md', x: 10, y: 10, bytes: async () => new Uint8Array() })`); await sleep(300);
+    expect((await ev('__bmd.path')) === p, 'dropping a .md file did not open it');
+  },
+  async 'close'() {
+    await t.open('x\n'); await t.stub({ closeWindow: 'true' });
+    await t.key('Ctrl+W');
+    expect((await t.asked()).some(([k]) => k === 'closeWindow'), 'Ctrl+W did not close the window');
+  },
+  async 'print'() {
+    await t.open('Printed text.\n'); await t.stub({ print: 'true' });
+    await t.key('Ctrl+P');
+    expect((await t.asked()).some(([k]) => k === 'print'), 'Ctrl+P did not print');
+    await send('Emulation.setEmulatedMedia', { media: 'print' });
+    const hidden = await ev(`['.topbar', '.statusbar'].every((s) => getComputedStyle(document.querySelector(s)).display === 'none')`);
+    expect(hidden, 'printing includes the toolbar and status bar');
+  },
+  async 'menu'() {
+    await t.open('x\n');
+    const b = await ev(`(() => { const r = document.getElementById('btn-menu').getBoundingClientRect(); return { x: r.left + 10, y: r.top + 10 }; })()`);
+    await t.click(b.x, b.y);
+    const sections = await ev(`[...document.querySelectorAll('.bmd-app-menu [data-section]')].map((e) => e.dataset.section)`);
+    expect(J(sections) === J(['File', 'Edit', 'View', 'Help']), 'menu sections: ' + J(sections));
+    const got = {};
+    for (const s of sections) {
+      const r = await ev(`(() => { const e = document.querySelector('.bmd-app-menu [data-section="${s}"]'); const r = e.getBoundingClientRect(); return { x: r.left + 20, y: r.top + r.height / 2 }; })()`);
+      await t.hover(r.x, r.y);
+      got[s] = await ev(`[...document.querySelectorAll('.bmd-app-sub:not(.bmd-app-deep) .bmd-app-item')].map((e) => e.innerText.replace(/\\s+/g, ' ').trim())`);
+    }
+    const want = { File: ['New Ctrl+N', 'Save As… Ctrl+Shift+S', 'Close Window Ctrl+W'], Edit: ['Undo Ctrl+Z', 'Replace… Ctrl+H', 'Copy as Markdown Ctrl+Shift+C'], View: ['Zoom In Ctrl+=', 'Toggle Full Screen F11'], Help: ['Check for Updates…', 'About BlockMD'] };
+    for (const [s, items] of Object.entries(want)) for (const i of items) expect(got[s].some((g) => g.includes(i)), `${s} menu lacks "${i}": ${J(got[s])}`);
+  },
+  async 'undo-menu'() {
+    await t.open('abc\n'); await t.caret('abc'); await t.type('d');
+    await t.menu('Edit', 'Undo');
+    expect((await ev('__bmd.view().state.doc.textContent')) === 'abc', 'Edit ▸ Undo did not undo');
+    await t.menu('Edit', 'Redo');
+    expect((await ev('__bmd.view().state.doc.textContent')) === 'abcd', 'Edit ▸ Redo did not redo');
+  },
+  async 'copy-md'() {
+    await t.open('Some **bold** and _em_ text.\n');
+    // Never the real clipboard: a check once overwrote the user's. execCommand('copy')
+    // is swapped for a synthetic copy event with its own DataTransfer.
+    await ev(`(() => { window.__copied = null; window.__execCommand = document.execCommand;
+      document.execCommand = (cmd) => { if (cmd !== 'copy') return window.__execCommand.call(document, cmd);
+        const dt = new DataTransfer(); document.dispatchEvent(new ClipboardEvent('copy', { clipboardData: dt, bubbles: true, cancelable: true }));
+        window.__copied = dt.getData('text/plain'); return true; }; })()`);
+    await ev(`(() => { const v = __bmd.view(); __parity.select(1, v.state.doc.content.size - 1); })()`);
+    try {
+      await t.key('Ctrl+Shift+C'); await sleep(200);
+      expect((await ev('window.__copied')) === 'Some **bold** and _em_ text.', 'Copy as Markdown gave ' + J(await ev('window.__copied')));
+    } finally {
+      await ev('document.execCommand = window.__execCommand');
+    }
+  },
+  async 'paste-plain'() {
+    await t.newLine();
+    // A synthetic Ctrl+Shift+V: a real one would paste the user's actual clipboard.
+    await ev(`__bmd.view().dom.dispatchEvent(new KeyboardEvent('keydown', { key: 'V', code: 'KeyV', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }))`);
+    await ev(`(() => { const dt = new DataTransfer(); dt.setData('text/plain', '# not a heading\\n- not a list');
+      __bmd.view().dom.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); })()`);
+    await sleep(200);
+    const top = await t.top();
+    expect(!top.includes('heading1') && !top.includes('bullet_list') && (await ev('__bmd.view().state.doc.textContent')).includes('# not a heading'), 'plain-text paste was parsed as Markdown: ' + J(top) + ' ' + J(await ev('__bmd.view().state.doc.textContent')));
+  },
+  async 'replace'() {
+    await t.open('cat and cat\n\nother cat\n\nnone\n'); await t.caret('none');
+    await t.key('Ctrl+H'); await t.type('cat');
+    await ev(`document.querySelector('.bmd-replace-input').focus()`); await t.type('dog');
+    await t.key('Enter');
+    expect((await t.save()) === 'dog and cat\n\nother cat\n\nnone\n', 'Replace changed ' + J(await t.save()));
+    await t.key('Ctrl+Enter');
+    expect((await t.save()) === 'dog and dog\n\nother dog\n\nnone\n', 'Replace all gave ' + J(await t.save()));
+  },
+  async 'find-next'() {
+    await t.open('a x a x a\n'); await t.caret('a');
+    await t.key('Ctrl+F'); await t.type('a');
+    const count = () => ev(`document.querySelector('.bmd-find-count').textContent`);
+    expect((await count()) === '1/3', 'find count ' + (await count()));
+    await t.key('F3'); expect((await count()) === '2/3', 'F3 did not go to the next match: ' + (await count()));
+    await t.key('Shift+F3'); expect((await count()) === '1/3', 'Shift+F3 did not go back');
+  },
+  async 'source-view'() {
+    await t.open('# Title\n\n* item\n');
+    await t.menu('View', 'Show Source');
+    expect(await ev(`__parity.visible('#source-pane') && document.getElementById('source-body').textContent === '# Title\\n\\n* item\\n'`), 'the source pane does not show the file');
+    await t.menu('View', 'Show Source');
+  },
+  async 'zoom'() {
+    await t.open('x\n');
+    await send('Emulation.clearDeviceMetricsOverride');
+    const w0 = await ev('innerWidth');
+    await t.key('Ctrl+Equal'); await sleep(300);
+    const w1 = await ev('innerWidth');
+    await t.key('Ctrl+0'); await sleep(300);
+    const w2 = await ev('innerWidth');
+    expect(w1 < w0 && Math.abs(w2 - w0) <= 1, `zoom did not change the page: ${w0} → ${w1} → ${w2}`);
+    expect((await ev(`localStorage.getItem('bmd.zoom')`)) === '1', 'zoom level not remembered');
+  },
+  async 'fullscreen'() {
+    await t.open('x\n');
+    await send('Emulation.clearDeviceMetricsOverride');
+    const h0 = await ev('innerHeight');
+    await t.key('F11'); await sleep(700);
+    const h1 = await ev('innerHeight');
+    await t.key('F11'); await sleep(700);
+    expect(h1 > h0, `F11 did not go full screen (${h0} → ${h1})`);
+  },
+  async 'word-count'() {
+    await t.open('Hello world, it’s me.\n\n你好世界\n');
+    const words = await ev(`document.getElementById('stat-words').textContent`);
+    expect(words === '8 words', 'word count: ' + J(words));
+  },
+  async 'links'() {
+    const other = file('linked.md', '# Linked\n');
+    await t.open(''); const here = file('links.md', '[site](https://example.com) and [other](linked.md)\n');
+    await ev(`__bmd.openPath(${J(here)})`); await ev(PAGE_HELPERS);
+    await t.stub({ openExternal: 'true' });
+    const at = (text) => ev(`(() => { const p = __parity.find(${J(text)}) + 1; const c = __bmd.view().coordsAtPos(p); return { x: c.left + 2, y: (c.top + c.bottom) / 2 }; })()`);
+    const site = await at('site');
+    await t.mouse('mouseMoved', site.x, site.y); await t.mouse('mousePressed', site.x, site.y, { modifiers: 2 }); await t.mouse('mouseReleased', site.x, site.y, { modifiers: 2 }); await sleep(200);
+    expect((await t.asked()).some(([k, u]) => k === 'openExternal' && u === 'https://example.com'), 'Ctrl+click did not open the web link');
+    const o = await at('other');
+    await t.mouse('mouseMoved', o.x, o.y); await t.mouse('mousePressed', o.x, o.y, { modifiers: 2 }); await t.mouse('mouseReleased', o.x, o.y, { modifiers: 2 }); await sleep(400);
+    expect((await ev('__bmd.path')) === other, 'Ctrl+click did not open the linked .md file');
+  },
+  async 'update-check'() {
+    await t.open('x\n'); await t.stub({ message: 'true' });
+    await t.menu('Help', 'Check for Updates');
+    await sleep(500);
+    expect((await t.asked()).some(([k, m]) => k === 'message' && /latest version|update/i.test(m)), 'Check for Updates said nothing');
+  },
+  async 'about'() {
+    await t.open('x\n'); await t.stub({ message: 'true' });
+    await t.menu('Help', 'About BlockMD');
+    await sleep(300);
+    const version = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version;
+    expect((await t.asked()).some(([k, m]) => k === 'message' && m.includes(version)), 'About does not show version ' + version);
+  },
+
   /* Interaction */
   async 'slash-menu'() {
     await t.newLine(); await t.type('/');
@@ -634,26 +972,38 @@ async function dragBlock(from, to) {
 
 /* ------------------------------------------------------------- run */
 
-const { features } = JSON.parse(readFileSync(join(ROOT, 'parity/notion.json'), 'utf8'));
+// Two lists, one runner: what Notion does inside a page, and what any desktop editor
+// is expected to do (the gaps Notion parity doesn't cover — see editor.json).
+const LISTS = [
+  ['Notion parity', 'parity/notion.json'],
+  ['Editor baseline', 'parity/editor.json'],
+];
 const results = [];
-for (const f of features) {
-  if (f.status !== 'must') { results.push({ ...f, result: f.status }); continue; }
-  if (only && !only.includes(f.check) && !only.includes(f.id)) continue;
-  const run = checks[f.check];
-  if (!run) { results.push({ ...f, result: 'fail', detail: `no check named "${f.check}" in scripts/parity.mjs` }); continue; }
-  // Several features can share one check; run it once.
-  const prior = results.find((r) => r.check === f.check && (r.result === 'pass' || r.result === 'fail'));
-  if (prior) { results.push({ ...f, result: prior.result, detail: prior.detail }); continue; }
-  let result = 'pass', detail = '';
-  try {
-    await Promise.race([run(), sleep(30000).then(() => { throw new Error('timed out'); })]);
-  } catch (err) {
-    result = 'fail';
-    detail = String(err.message ?? err).split('\n').slice(0, 3).join(' ');
+for (const [list, file] of LISTS) {
+  const { features } = JSON.parse(readFileSync(join(ROOT, file), 'utf8'));
+  for (const f of features) {
+    const row = { ...f, list };
+    if (f.status !== 'must') { results.push({ ...row, result: f.status }); continue; }
+    if (only && !only.includes(f.check) && !only.includes(f.id)) continue;
+    const run = checks[f.check];
+    if (!run) { results.push({ ...row, result: 'fail', detail: `no check named "${f.check}" in scripts/parity.mjs` }); continue; }
+    // Several features can share one check; run it once.
+    const prior = results.find((r) => r.check === f.check && (r.result === 'pass' || r.result === 'fail'));
+    if (prior) { results.push({ ...row, result: prior.result, detail: prior.detail }); continue; }
+    let result = 'pass', detail = '';
+    try {
+      await Promise.race([run(), sleep(45000).then(() => { throw new Error('timed out'); })]);
+    } catch (err) {
+      result = 'fail';
+      detail = String(err.message ?? err).split('\n').slice(0, 3).join(' ');
+    }
+    // A dialog that would have opened is a failure even if the check passed otherwise.
+    const blocked = await ev(`(() => { const b = localStorage.getItem('bmd.devBlocked'); localStorage.removeItem('bmd.devBlocked'); return b; })()`).catch(() => null);
+    if (blocked && blocked !== '[]' && result === 'pass') { result = 'fail'; detail = 'a native dialog would have opened: ' + blocked; }
+    try { await t.cleanup(); } catch { /* best effort */ }
+    results.push({ ...row, result, detail });
+    console.log(`${result === 'pass' ? '✅' : '❌'} ${list} · ${f.area} · ${f.feature}${detail ? ' — ' + detail : ''}`);
   }
-  try { await t.key('Escape'); } catch { /* best effort */ }
-  results.push({ ...f, result, detail });
-  console.log(`${result === 'pass' ? '✅' : '❌'} ${f.area} · ${f.feature}${detail ? ' — ' + detail : ''}`);
 }
 
 // Pictures of the whole fixture, light and dark, for a human look at the result.
@@ -669,22 +1019,38 @@ if (!only) {
 }
 await send('Emulation.clearDeviceMetricsOverride');
 
-const must = results.filter((r) => r.status === 'must');
-const passed = must.filter((r) => r.result === 'pass').length;
-const icon = { pass: '✅', fail: '❌', planned: '🕓 planned', wontdo: '⛔ won\'t do' };
-const report = [
-  `# Notion parity — ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`,
-  '',
-  `**Must-have features passing: ${passed} / ${must.length}**`,
-  '',
-  '| Area | Feature | Result | Detail |',
-  '| --- | --- | --- | --- |',
-  ...results.map((r) => `| ${r.area} | ${r.feature} | ${icon[r.result]} | ${(r.detail || r.note || '').replace(/\|/g, '\\|')} |`),
-  '',
-].join('\n');
-writeFileSync(join(WORK, 'report.md'), report);
-console.log(`\nMust-have features passing: ${passed} / ${must.length}. Report: .cache/parity/report.md`);
+const icon = { pass: '✅', fail: '❌', planned: '🕓 planned', wontdo: "⛔ won't do" };
+const lines = [`# Parity report — ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`, ''];
+let allPass = true;
+for (const [list] of LISTS) {
+  const rows = results.filter((r) => r.list === list);
+  const must = rows.filter((r) => r.status === 'must');
+  const passed = must.filter((r) => r.result === 'pass').length;
+  if (passed !== must.length) allPass = false;
+  console.log(`${list}: ${passed} / ${must.length} must-have features passing.`);
+  lines.push(`## ${list}: ${passed} / ${must.length} must-haves passing`, '',
+    '| Area | Feature | Result | Detail |', '| --- | --- | --- | --- |',
+    ...rows.map((r) => `| ${r.area} | ${r.feature} | ${icon[r.result]} | ${(r.detail || r.note || '').replace(/\|/g, '\\|')} |`), '');
+}
+writeFileSync(join(WORK, 'report.md'), lines.join('\n'));
 
+// For the release gate (scripts/release-gate.mjs): which commit this result belongs
+// to. Uncommitted changes to the app mean it belongs to no commit.
+if (!only) {
+  const git = (...a) => execSync(`git ${a.join(' ')}`, { cwd: ROOT, encoding: 'utf8' }).trim();
+  const dirty = git('status', '--porcelain', '--', 'app', 'src', 'src-tauri', 'parity', 'scripts/parity.mjs', 'package.json');
+  const summary = LISTS.map(([list]) => {
+    const must = results.filter((r) => r.list === list && r.status === 'must');
+    return `${list} ${must.filter((r) => r.result === 'pass').length}/${must.length}`;
+  }).join(', ');
+  writeFileSync(join(WORK, 'result.json'), JSON.stringify({
+    commit: dirty ? null : git('rev-parse', 'HEAD'), allPass, summary, time: new Date().toISOString(),
+  }, null, 2));
+}
+console.log('Report: .cache/parity/report.md');
+
+// Leave the debug profile as a person would find it: dialogs on, nothing pending.
+await ev(`(() => { for (const k of ${J([...DEV_KEYS, 'bmd.devNoDialogs'])}) localStorage.removeItem(k); })()`).catch(() => {});
 ws.close();
 stopApp();
-process.exit(passed === must.length ? 0 : 1);
+process.exit(allPass ? 0 : 1);

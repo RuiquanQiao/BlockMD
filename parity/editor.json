@@ -1,0 +1,46 @@
+{
+  "about": "What a desktop Markdown editor is expected to do, whatever it looks like — the gaps a user hit that Notion parity doesn't cover. Sources: Typora's menus and shortcuts (support.typora.io/Shortcut-Keys), its auto-save and draft recovery (support.typora.io/Auto-Save), and ordinary Windows/macOS document-app behaviour. Same statuses as notion.json; every 'must' is checked by `npm run parity` in the real app. Native dialogs (open, save, confirm, print) can't be clicked over the debugging protocol, so the checks answer them through dev-only stubs (platform.js `stub`) — the flows around the dialog are real.",
+  "features": [
+    { "id": "launch-untitled", "area": "Files", "feature": "Opening BlockMD with no file shows a new, empty Untitled document (no demo text)", "status": "must", "check": "launch-untitled" },
+    { "id": "launch-last", "area": "Files", "feature": "Opening BlockMD reopens the last file you opened or edited; close without doing anything and the next launch is a new document", "status": "must", "check": "launch-last" },
+    { "id": "empty-file", "area": "Files", "feature": "An empty .md (a new file, or a .txt renamed) opens, takes typing and saves", "status": "must", "check": "empty-file" },
+    { "id": "new", "area": "Files", "feature": "File ▸ New (Ctrl+N) starts an empty document, asking first about unsaved changes", "status": "must", "check": "new" },
+    { "id": "open", "area": "Files", "feature": "File ▸ Open (Ctrl+O)", "status": "must", "check": "open" },
+    { "id": "open-recent", "area": "Files", "feature": "File ▸ Open Recent lists recently opened files; a missing one is removed", "status": "must", "check": "open-recent" },
+    { "id": "save", "area": "Files", "feature": "Save (Ctrl+S) writes the file; the title shows • while there are unsaved changes", "status": "must", "check": "save" },
+    { "id": "save-untitled", "area": "Files", "feature": "Saving an untitled document asks where, then keeps that name", "status": "must", "check": "save-untitled" },
+    { "id": "save-as", "area": "Files", "feature": "Save As (Ctrl+Shift+S) writes a copy under a new name and continues there", "status": "must", "check": "save-as" },
+    { "id": "save-fails", "area": "Files", "feature": "A save that fails (read-only file) says so and keeps the text unsaved", "status": "must", "check": "save-fails" },
+    { "id": "disk-change", "area": "Files", "feature": "The file changed by another program: reloaded if clean, asked about if there are unsaved changes", "status": "must", "check": "disk-change" },
+    { "id": "drafts", "area": "Files", "feature": "Unsaved changes survive a crash and are offered back on the next launch", "status": "must", "check": "drafts" },
+    { "id": "drop-md", "area": "Files", "feature": "Dropping a .md file on the window opens it", "status": "must", "check": "drop-md", "note": "The check calls the drop handler directly; an OS drag can't be simulated" },
+    { "id": "close", "area": "Files", "feature": "File ▸ Close Window (Ctrl+W), asking first about unsaved changes", "status": "must", "check": "close" },
+    { "id": "print", "area": "Files", "feature": "Print / Export PDF (Ctrl+P), printing only the document", "status": "must", "check": "print" },
+
+    { "id": "menu", "area": "Menu", "feature": "An app menu with File / Edit / View / Help, each item showing its shortcut", "status": "must", "check": "menu" },
+
+    { "id": "undo-menu", "area": "Edit", "feature": "Edit ▸ Undo / Redo", "status": "must", "check": "undo-menu" },
+    { "id": "copy-md", "area": "Edit", "feature": "Copy as Markdown (Ctrl+Shift+C)", "status": "must", "check": "copy-md" },
+    { "id": "paste-plain", "area": "Edit", "feature": "Paste as Plain Text (Ctrl+Shift+V)", "status": "must", "check": "paste-plain" },
+    { "id": "replace", "area": "Edit", "feature": "Replace (Ctrl+H): one match or all, editing only the matched blocks", "status": "must", "check": "replace" },
+    { "id": "find-next", "area": "Edit", "feature": "Find next / previous (F3 / Shift+F3)", "status": "must", "check": "find-next" },
+    { "id": "select-word-line", "area": "Edit", "feature": "Select word (Ctrl+D) / line (Ctrl+L)", "status": "wontdo", "note": "Ctrl+D duplicates the block, as in Notion; double- and triple-click select a word and a paragraph" },
+
+    { "id": "source-view", "area": "View", "feature": "Show the Markdown source (View ▸ Show Source)", "status": "must", "check": "source-view" },
+    { "id": "zoom", "area": "View", "feature": "Zoom in / out / actual size (Ctrl+= / Ctrl+- / Ctrl+0), remembered", "status": "must", "check": "zoom" },
+    { "id": "fullscreen", "area": "View", "feature": "Full screen (F11)", "status": "must", "check": "fullscreen" },
+    { "id": "word-count", "area": "View", "feature": "Word count in the status bar (CJK characters counted one each)", "status": "must", "check": "word-count" },
+    { "id": "outline", "area": "View", "feature": "Outline / file tree sidebar", "status": "planned" },
+    { "id": "focus-mode", "area": "View", "feature": "Focus and typewriter modes", "status": "planned" },
+
+    { "id": "links", "area": "Links", "feature": "Ctrl+click a link: web links open in the browser, .md links open in BlockMD", "status": "must", "check": "links" },
+
+    { "id": "update-check", "area": "Help", "feature": "Help ▸ Check for Updates says whether there is one", "status": "must", "check": "update-check" },
+    { "id": "about", "area": "Help", "feature": "Help ▸ About shows the version", "status": "must", "check": "about" },
+
+    { "id": "tabs-windows", "area": "Files", "feature": "Several documents at once (tabs or windows)", "status": "planned" },
+    { "id": "auto-save", "area": "Files", "feature": "Optional auto-save", "status": "planned", "note": "Drafts already protect against crashes" },
+    { "id": "encodings", "area": "Files", "feature": "Files in encodings other than UTF-8 (e.g. GBK)", "status": "planned", "note": "Refused with a clear message today: saving them back byte-for-byte needs an encoder for that charset" },
+    { "id": "export-html", "area": "Files", "feature": "Export to HTML / Word", "status": "planned", "note": "PDF works through Print" }
+  ]
+}

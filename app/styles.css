@@ -749,3 +749,36 @@ body {
 .bmd-emoji[data-show="false"] { visibility: hidden; left: -9999px; top: -9999px; }
 .bmd-emoji-item { font-size: 22px; line-height: 1; padding: 5px 0; border: 0; border-radius: 4px; background: none; cursor: pointer; }
 .bmd-emoji-item:hover, .bmd-emoji-item.is-active { background: var(--hover); }
+
+/* ——— App menu (app-menu.js): Notion's desktop menu card with fly-outs ——— */
+.btn-menu { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; margin-right: 2px; }
+.btn-menu img { display: block; border-radius: 5px; }
+.bmd-app-menu, .bmd-app-sub { position: fixed; min-width: 150px; padding: 6px 4px; z-index: 60; }
+.bmd-app-sub { min-width: 260px; max-width: 460px; }
+.bmd-app-item { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; }
+.bmd-app-item:disabled { color: var(--ink-3); cursor: default; }
+.bmd-app-item:disabled:hover { background: none; }
+.bmd-app-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bmd-app-key { margin-left: 24px; font-size: 12px; color: var(--ink-3); white-space: nowrap; }
+.bmd-app-arrow { color: var(--ink-3); font-size: 16px; line-height: 1; }
+.bmd-app-check { width: 14px; color: var(--accent); flex: none; }
+.bmd-app-sep { height: 1px; margin: 4px 6px; background: var(--rule); }
+.bmd-app-item.is-open { background: var(--hover); }
+
+/* ——— Replace row in the find bar (editor/find.js) ——— */
+.bmd-find { flex-direction: column; align-items: stretch; gap: 4px; }
+.bmd-find-row { display: flex; align-items: center; gap: 4px; }
+.bmd-replace-row { display: none; }
+.bmd-find[data-replace="true"] .bmd-replace-row { display: flex; }
+.bmd-replace-input { flex: 1; min-width: 0; }
+.bmd-find .bmd-replace-btn { width: auto; padding: 0 8px; font-size: 12px; }
+
+/* ——— Print / Export PDF: just the document ——— */
+@media print {
+  .topbar, .statusbar, .pane-source, .bmd-handle, .bmd-toolbar, .bmd-find, .update-bar,
+  .bmd-menu, .bmd-emoji, .bmd-code-lang, .bmd-toggle-arrow { display: none !important; }
+  body { display: block; height: auto; }
+  .workspace, .pane, .pane-editor { display: block; overflow: visible; height: auto; }
+  .editor-host { max-width: none; padding: 0; }
+  .bmd-toggle-body { display: block !important; }
+}

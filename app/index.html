@@ -10,7 +10,8 @@
   <header class="topbar">
     <!-- The document name is the only label here, the way a Notion page header works.
          The application name already sits in the OS title bar. -->
-    <div class="filename" id="filename">demo.md</div>
+    <button class="btn btn-menu" id="btn-menu" type="button" aria-label="Menu" aria-haspopup="menu" aria-expanded="false" title="Menu"></button>
+    <div class="filename" id="filename">Untitled.md</div>
     <div class="topbar-actions">
       <button class="btn" id="btn-style" type="button" aria-label="Page style" aria-haspopup="menu" aria-expanded="false" title="Page style">···</button>
       <button class="btn" id="btn-open" type="button">Open</button>
@@ -36,6 +37,7 @@
     <span class="dot" id="status-dot"></span>
     <span id="status-text">Loading…</span>
     <span class="spacer"></span>
+    <span class="stat" id="stat-words"></span>
     <span class="stat" id="stat-blocks"></span>
     <span class="stat" id="stat-hidden"></span>
   </footer>

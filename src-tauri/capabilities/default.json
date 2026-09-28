@@ -1,12 +1,16 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "File dialogs, the two custom byte-level file commands, and self-update. No fs plugin: see src/lib.rs.",
+  "description": "File dialogs, the byte-level file commands, window controls for the app menu (close, fullscreen, zoom), and self-update. No fs plugin: see src/lib.rs.",
   "windows": ["main"],
   "permissions": [
     "core:default",
     "core:window:allow-set-title",
     "core:window:allow-destroy",
+    "core:window:allow-close",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-is-fullscreen",
+    "core:webview:allow-set-webview-zoom",
     "dialog:allow-open",
     "dialog:allow-save",
     "dialog:allow-message",

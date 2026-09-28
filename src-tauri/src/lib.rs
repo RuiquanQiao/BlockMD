@@ -75,6 +75,39 @@ fn percent_decode(s: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
+/// Last-modified time of a file in milliseconds, or None if it can't be read.
+/// Used to notice that another program changed the open document.
+#[tauri::command]
+fn file_modified(path: String) -> Option<u64> {
+    let modified = std::fs::metadata(&path).ok()?.modified().ok()?;
+    let since = modified.duration_since(std::time::UNIX_EPOCH).ok()?;
+    Some(since.as_millis() as u64)
+}
+
+/// Open a web or mail link in the user's default app (Ctrl+click on a link, Help menu).
+///
+/// Only http, https and mailto are accepted — never a file path or another scheme —
+/// and the URL is passed as a single argument, never through a shell, so it can't be
+/// turned into a command.
+#[tauri::command]
+fn open_external(url: String) -> Result<(), String> {
+    let lower = url.to_ascii_lowercase();
+    if !(lower.starts_with("https://") || lower.starts_with("http://") || lower.starts_with("mailto:")) {
+        return Err(format!("not a web link: {url}"));
+    }
+    #[cfg(target_os = "windows")]
+    let mut cmd = {
+        let mut c = std::process::Command::new("rundll32");
+        c.arg("url.dll,FileProtocolHandler");
+        c
+    };
+    #[cfg(target_os = "macos")]
+    let mut cmd = std::process::Command::new("open");
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut cmd = std::process::Command::new("xdg-open");
+    cmd.arg(&url).spawn().map(|_| ()).map_err(|e| format!("{url}: {e}"))
+}
+
 /// The file the app was launched with, if any.
 ///
 /// This is what makes "double-click a .md" work once the app is installed and the
@@ -94,7 +127,9 @@ fn startup_file() -> Option<String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![read_file, write_file, write_asset, startup_file])
+        .invoke_handler(tauri::generate_handler![
+            read_file, write_file, write_asset, startup_file, file_modified, open_external
+        ])
         .setup(|app| {
             // Self-update from GitHub Releases (see app/updater.js). The process plugin
             // is only here to relaunch once an update is installed.

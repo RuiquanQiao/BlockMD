@@ -97,7 +97,22 @@ export function startUpdateChecks({ isDirty }) {
 
   check();
   setInterval(check, RECHECK_MS);
+
+  // Help ▸ Check for Updates…: the same check, but it always answers.
+  manualCheck = async () => {
+    try {
+      const update = await platform.checkForUpdate();
+      if (update) { bar.hidden = true; offered = null; offer(update); return; }
+      await platform.showMessage(`You're on the latest version (BlockMD ${await platform.appVersion()}).`, 'Check for Updates');
+    } catch (err) {
+      await platform.showMessage(`Couldn't check for updates: ${err?.message ?? err}`, 'Check for Updates');
+    }
+  };
 }
+
+let manualCheck = async () => {};
+/** Check now and report the result, even when there is nothing new. */
+export const checkForUpdatesNow = () => manualCheck();
 
 function escape(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);

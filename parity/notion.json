@@ -57,7 +57,7 @@
     { "id": "kb-bold", "area": "Keyboard", "feature": "Ctrl+B bold", "status": "must", "check": "key-bold" },
     { "id": "kb-italic", "area": "Keyboard", "feature": "Ctrl+I italic", "status": "must", "check": "key-italic" },
     { "id": "kb-code", "area": "Keyboard", "feature": "Ctrl+E inline code", "status": "must", "check": "key-code" },
-    { "id": "kb-strike", "area": "Keyboard", "feature": "Ctrl+Shift+S strikethrough", "status": "must", "check": "key-strike" },
+    { "id": "kb-strike", "area": "Keyboard", "feature": "Strikethrough shortcut", "status": "must", "check": "key-strike", "note": "Ctrl+Shift+X. Notion uses Ctrl+Shift+S, which is Save As in Typora and Windows apps (parity/editor.json)" },
     { "id": "kb-link", "area": "Keyboard", "feature": "Ctrl+K add link", "status": "must", "check": "key-link" },
     { "id": "kb-underline", "area": "Keyboard", "feature": "Ctrl+U underline", "status": "wontdo", "note": "No Markdown underline" },
     { "id": "kb-undo", "area": "Keyboard", "feature": "Ctrl+Z undo, Ctrl+Shift+Z / Ctrl+Y redo", "status": "must", "check": "key-undo-redo" },

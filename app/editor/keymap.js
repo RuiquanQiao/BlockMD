@@ -67,7 +67,9 @@ function handleKeyDown(view, e) {
   const { state } = view;
 
   if (mod && e.shiftKey && !e.altKey) {
-    if (e.code === 'KeyS') {
+    // Ctrl+Shift+X, not Notion's Ctrl+Shift+S: that is Save As in Typora and in every
+    // Windows document app, and one key can't do both (it once did — main.js saw it too).
+    if (e.code === 'KeyX') {
       return toggleMark(state.schema.marks.strike_through)(state, view.dispatch);
     }
     const digit = /^Digit(\d)$/.exec(e.code)?.[1];

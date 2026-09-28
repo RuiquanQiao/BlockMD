@@ -14,7 +14,7 @@ import { openLinkEditor } from './link.js';
 const BUTTONS = [
   { mark: 'strong', label: 'B', title: 'Bold (Ctrl+B)', style: 'font-weight:700' },
   { mark: 'emphasis', label: 'i', title: 'Italic (Ctrl+I)', style: 'font-style:italic;font-family:Georgia,serif' },
-  { mark: 'strike_through', label: 'S', title: 'Strikethrough (Ctrl+Shift+S)', style: 'text-decoration:line-through' },
+  { mark: 'strike_through', label: 'S', title: 'Strikethrough (Ctrl+Shift+X)', style: 'text-decoration:line-through' },
   { mark: 'inlineCode', label: '&lt;/&gt;', title: 'Code (Ctrl+E)', style: 'font-family:var(--font-mono);font-size:12px' },
   { mark: 'link', label: 'Link', title: 'Link (Ctrl+K)', style: '' },
 ];

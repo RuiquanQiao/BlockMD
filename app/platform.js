@@ -142,8 +142,51 @@ export async function writeFile(path, text) {
   await invoke('write_file', { path, contents: Array.from(encodeFile(text)) });
 }
 
+/**
+ * Dev-only stand-ins for native dialogs and window actions. scripts/parity.mjs can't
+ * click a system dialog, so it sets `window.__bmdStub.<name>` to answer for it.
+ * Production builds never look (import.meta.env.DEV is false there).
+ */
+function stub(name) {
+  if (!import.meta.env?.DEV) return undefined;
+  if (window.__bmdStub?.[name]) return window.__bmdStub[name];
+  // Questions asked during startup (restore a draft?) come before any script could
+  // install a stub, so the answer can also be left in local storage.
+  if (name === 'confirm') {
+    let answer = null;
+    try { answer = localStorage.getItem('bmd.devConfirm'); } catch { /* none */ }
+    if (answer) return () => answer === 'yes';
+  }
+  // While scripts/parity.mjs runs, a native dialog must never open: nothing can click
+  // it, and the page freezes behind it (it happened — a draft-restore question at
+  // startup blocked every check after it). Answer with the safe default instead
+  // (cancel / no / do nothing) and record the attempt, which fails that check.
+  // The flag comes from the environment when parity.mjs launched the app itself (in
+  // force before the first page load), or from local storage when it attached to one.
+  let noDialogs = import.meta.env.VITE_BMD_NO_DIALOGS === '1';
+  try { noDialogs ||= localStorage.getItem('bmd.devNoDialogs') === '1'; } catch { /* no storage */ }
+  if (noDialogs && name in DIALOG_DEFAULTS) {
+    return (...args) => {
+      try {
+        const log = JSON.parse(localStorage.getItem('bmd.devBlocked') || '[]');
+        log.push([name, String(args[0] ?? '').slice(0, 120)]);
+        localStorage.setItem('bmd.devBlocked', JSON.stringify(log));
+      } catch { /* not recorded */ }
+      return DIALOG_DEFAULTS[name];
+    };
+  }
+  return undefined;
+}
+
+/** What each native dialog answers when dialogs are switched off (see stub). */
+const DIALOG_DEFAULTS = {
+  pickOpenPath: null, pickSavePath: null, confirm: false, message: undefined,
+  print: undefined, closeWindow: undefined, openExternal: undefined,
+};
+
 /** @returns {Promise<string|null>} */
 export async function pickOpenPath() {
+  if (stub('pickOpenPath')) return stub('pickOpenPath')();
   const { open } = await tauri();
   const picked = await open({ multiple: false, directory: false, filters: MD_FILTER });
   return typeof picked === 'string' ? picked : null;
@@ -154,6 +197,7 @@ export async function pickOpenPath() {
  * @returns {Promise<string|null>}
  */
 export async function pickSavePath(defaultName) {
+  if (stub('pickSavePath')) return stub('pickSavePath')(defaultName);
   const { save } = await tauri();
   return (await save({ defaultPath: defaultName, filters: MD_FILTER })) ?? null;
 }
@@ -171,9 +215,74 @@ export async function startupPath() {
  * @returns {Promise<boolean>} true to proceed
  */
 export async function confirmDiscard(message) {
+  if (stub('confirm')) return stub('confirm')(message);
   if (!isDesktop) return window.confirm(message);
   const { ask } = await tauri();
   return ask(message, { title: 'BlockMD', kind: 'warning' });
+}
+
+/** Show an informational message (About, update check results). */
+export async function showMessage(message, title = 'BlockMD') {
+  if (stub('message')) return stub('message')(message);
+  if (!isDesktop) { window.alert(message); return; }
+  const { message: show } = await tauri();
+  await show(message, { title, kind: 'info' });
+}
+
+/** Last-modified time of a file in ms, or null — to notice changes made elsewhere. */
+export async function fileModified(path) {
+  if (!isDesktop || !path) return null;
+  const { invoke } = await tauri();
+  return (await invoke('file_modified', { path })) ?? null;
+}
+
+/** Open a web or mail link in the default browser / mail app. */
+export async function openExternal(url) {
+  if (stub('openExternal')) return stub('openExternal')(url);
+  if (!isDesktop) { window.open(url, '_blank', 'noopener'); return; }
+  const { invoke } = await tauri();
+  await invoke('open_external', { url });
+}
+
+/** Close the window; the close guard in main.js still asks about unsaved changes. */
+export async function closeWindow() {
+  if (stub('closeWindow')) return stub('closeWindow')();
+  if (!isDesktop) { window.close(); return; }
+  const { getCurrentWindow } = await import('@tauri-apps/api/window');
+  await getCurrentWindow().close();
+}
+
+export async function toggleFullscreen() {
+  if (!isDesktop) {
+    if (document.fullscreenElement) await document.exitFullscreen(); else await document.documentElement.requestFullscreen();
+    return;
+  }
+  const { getCurrentWindow } = await import('@tauri-apps/api/window');
+  const win = getCurrentWindow();
+  await win.setFullscreen(!(await win.isFullscreen()));
+}
+
+/**
+ * Zoom the whole page. The webview's own zoom, not CSS `zoom`: with CSS zoom the
+ * floating menus, which are positioned from getBoundingClientRect, land in the wrong
+ * place by exactly the zoom factor.
+ */
+export async function setZoom(level) {
+  if (!isDesktop) { document.documentElement.style.zoom = String(level); return; }
+  const { getCurrentWebview } = await import('@tauri-apps/api/webview');
+  await getCurrentWebview().setZoom(level);
+}
+
+export function print() {
+  if (stub('print')) return stub('print')();
+  window.print();
+}
+
+/** The app's version, e.g. "0.1.4". */
+export async function appVersion() {
+  if (!isDesktop) return 'web';
+  const { getVersion } = await import('@tauri-apps/api/app');
+  return getVersion();
 }
 
 /**
