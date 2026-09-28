@@ -1,0 +1,53 @@
+name: Website
+
+# Publishes site/ to GitHub Pages. The site is plain HTML with no build step; the only
+# thing added at deploy time is releases.json, a snapshot of the release list, so the
+# download page reads it from our own origin instead of hitting the GitHub API (60
+# requests an hour per visitor IP) on every page view.
+#
+# It redeploys when a release is published as well as on site changes, so the
+# download buttons point at the new version as soon as the release goes public.
+on:
+  push:
+    branches: [main]
+    paths: ['site/**', '.github/workflows/pages.yml']
+  release:
+    types: [published, edited, deleted]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Snapshot the release list
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # --slurp wraps each page in an outer array (and can't be combined with --jq),
+          # hence .[][] and the separate jq.
+          gh api "repos/${{ github.repository }}/releases?per_page=100" --paginate --slurp \
+            | jq '[.[][] | select(.draft | not) | {tag_name, name, published_at, prerelease, draft, html_url, body,
+                   assets: [.assets[] | {name, size, browser_download_url}]}]' \
+            > site/releases.json
+          jq -r '.[] | "\(.tag_name)  \(.assets | length) files"' site/releases.json
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4

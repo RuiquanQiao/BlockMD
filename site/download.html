@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Download BlockMD</title>
+  <meta name="description" content="Download BlockMD for Windows and macOS, or get any earlier version.">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="./"><img src="icon.png" alt="">BlockMD</a>
+    <a class="navlink hide-narrow" href="./#how">How it works</a>
+    <a class="navlink hide-narrow" href="./#faq">FAQ</a>
+    <a class="navlink" href="https://github.com/RuiquanQiao/BlockMD">GitHub</a>
+    <a class="btn small primary" href="download.html" aria-current="page">Download</a>
+  </header>
+
+  <main class="page">
+    <img class="page-icon" src="icon.png" alt="">
+    <h1 class="title">Download BlockMD</h1>
+    <p class="lede">Free and open source. No account needed.</p>
+
+    <div id="latest"><p class="loading">Loading the latest version…</p></div>
+
+    <div class="callout">
+      <div class="emoji" aria-hidden="true">🔓</div>
+      <div>
+        <p><strong>You'll see a warning the first time you open BlockMD.</strong></p>
+        <p>The installers aren't code-signed yet. On Windows, choose <em>More info → Run anyway</em>. On macOS, right-click BlockMD in Applications and choose <em>Open</em>. You only need to do this once.</p>
+      </div>
+    </div>
+
+    <details>
+      <summary>Make BlockMD open .md files when you double-click them</summary>
+      <div class="toggle-body">
+        <p>Windows doesn't let installers change your default apps. Right-click any <code>.md</code> file, choose <em>Open with → Choose another app → BlockMD</em>, then select <em>Always</em>.</p>
+      </div>
+    </details>
+    <details>
+      <summary>Does the Windows installer need an internet connection?</summary>
+      <div class="toggle-body">
+        <p>BlockMD needs Microsoft Edge WebView2. It's already installed on Windows 11 and most Windows 10 PCs. If it's missing, the installer downloads it, so the first install needs a connection.</p>
+      </div>
+    </details>
+
+    <h2 id="previous">Previous versions</h2>
+    <p class="section-lede">Every earlier release is kept, in case you need to go back.</p>
+    <div id="previous-list"><p class="loading">Loading…</p></div>
+  </main>
+
+  <footer>
+    <div class="page">
+      <span>BlockMD · MIT License</span>
+      <a href="./">Home</a>
+      <a href="https://github.com/RuiquanQiao/BlockMD/releases">All releases on GitHub</a>
+      <a href="https://github.com/RuiquanQiao/BlockMD/issues">Report a problem</a>
+    </div>
+  </footer>
+
+  <script src="releases.js"></script>
+  <script>
+    (function () {
+      var esc = BMD.esc;
+      var os = BMD.detectOS();
+
+      function fileButtons(files, primary) {
+        return files.map(function (f, i) {
+          return '<a class="btn small' + (primary && i === 0 ? ' primary' : '') + '" href="' + esc(f.asset.url) + '"' +
+            (f.hint ? ' title="' + esc(f.hint) + '"' : '') + '>' +
+            '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v8.5M4.5 7 8 10.5 11.5 7M3 13.5h10"/></svg>' +
+            esc(f.label) + ' <span class="meta">' + esc(f.ext) + ' · ' + BMD.size(f.asset.size) + '</span></a>';
+        }).join('');
+      }
+
+      function fileList(rel) {
+        var g = BMD.group(rel);
+        var rows = [];
+        g.platforms.forEach(function (p) {
+          p.files.forEach(function (f) {
+            rows.push({ label: p.platform.name + ' — ' + f.label, asset: f.asset });
+          });
+        });
+        g.other.forEach(function (a) { rows.push({ label: a.name, asset: a }); });
+        if (!rows.length) return '<p>No downloadable files in this release.</p>';
+        return '<ul class="filelist">' + rows.map(function (r) {
+          return '<li><a href="' + esc(r.asset.url) + '" title="' + esc(r.asset.name) + '">' + esc(r.label) + '</a>' +
+            '<span class="size">' + BMD.size(r.asset.size) + '</span></li>';
+        }).join('') + '</ul>';
+      }
+
+      function renderLatest(rel) {
+        var g = BMD.group(rel);
+        // The visitor's own platform goes first; the rest keep their usual order.
+        var rows = g.platforms.slice().sort(function (a, b) {
+          return (b.platform.os === os) - (a.platform.os === os);
+        });
+        var note = '';
+        if (os === 'linux') note = '<p class="notes">There isn\'t a Linux version yet. It\'s planned.</p>';
+        if (os === 'mobile') note = '<p class="notes">BlockMD is a desktop app. Open this page on your Windows PC or Mac to download it.</p>';
+
+        var html =
+          '<div class="release-head"><h3 style="margin:0">Version ' + esc(rel.version) + '</h3>' +
+          '<span class="tag">Latest</span>' + (rel.prerelease ? '<span class="tag grey">Pre-release</span>' : '') +
+          '<span class="date">' + BMD.date(rel.date) + '</span></div>' + note +
+          '<div class="platforms">' + rows.map(function (p, i) {
+            var mine = p.platform.os === os && (i === 0);
+            return '<div class="platform' + (mine ? ' mine' : '') + '">' +
+              '<div><h3>' + esc(p.platform.name) + (mine ? ' <span class="tag">Your system</span>' : '') + '</h3>' +
+              '<p>' + esc(p.platform.desc) + '</p></div>' +
+              '<div class="files">' + fileButtons(p.files, mine) + '</div></div>';
+          }).join('') + '</div>';
+
+        if (g.other.length) {
+          html += '<details><summary>Other files</summary><div class="toggle-body">' +
+            fileList({ assets: g.other }) + '</div></details>';
+        }
+        if (rel.notes.trim()) {
+          html += '<details><summary>What\'s in version ' + esc(rel.version) + '</summary><div class="toggle-body notes">' +
+            BMD.notes(rel.notes) + '<p><a href="' + esc(rel.url) + '">View this release on GitHub</a></p></div></details>';
+        }
+        document.getElementById('latest').innerHTML = html;
+      }
+
+      function renderPrevious(list, latest) {
+        var older = list.filter(function (r) { return r !== latest; });
+        var box = document.getElementById('previous-list');
+        if (!older.length) {
+          box.innerHTML = '<p class="notes">This is the first release. Earlier versions will appear here after the next update.</p>';
+          return;
+        }
+        box.innerHTML = older.map(function (r) {
+          return '<details><summary>Version ' + esc(r.version) +
+            (r.prerelease ? ' <span class="tag grey">Pre-release</span>' : '') +
+            '<span class="date" style="font-weight:400;color:var(--ink-3);font-size:14px;margin-left:8px">' + BMD.date(r.date) + '</span></summary>' +
+            '<div class="toggle-body">' + fileList(r) +
+            '<p class="notes" style="padding-left:8px"><a href="' + esc(r.url) + '">Release notes</a></p></div></details>';
+        }).join('');
+      }
+
+      function fail() {
+        var msg = '<p class="notes">Couldn\'t load the list of versions. You can download every version from ' +
+          '<a href="' + BMD.RELEASES_PAGE + '">GitHub Releases</a>.</p>';
+        document.getElementById('latest').innerHTML = msg;
+        document.getElementById('previous-list').innerHTML = msg;
+      }
+
+      BMD.all().then(function (list) {
+        if (!list.length) return fail();
+        var latest = list.find(function (r) { return !r.prerelease; }) || list[0];
+        renderLatest(latest);
+        renderPrevious(list, latest);
+        if (location.hash === '#previous') document.getElementById('previous').scrollIntoView();
+      }).catch(fail);
+
+      var bar = document.querySelector('.topbar');
+      addEventListener('scroll', function () { bar.classList.toggle('scrolled', scrollY > 4); }, { passive: true });
+    })();
+  </script>
+</body>
+</html>
