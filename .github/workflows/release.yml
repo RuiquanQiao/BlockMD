@@ -72,6 +72,9 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           includeUpdaterJson: true
+          # The generic windows-x86_64 entry is what an updater falls back to when it
+          # can't tell how it was installed; point it at the normal installer.
+          updaterJsonPreferNsis: true
           args: ${{ matrix.args }}
           tagName: ${{ github.ref_name }}
           releaseName: 'BlockMD ${{ github.ref_name }}'
