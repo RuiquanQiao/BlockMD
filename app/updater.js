@@ -85,7 +85,9 @@ export function startUpdateChecks({ isDirty }) {
   });
 
   async function check() {
-    if (busy) return;
+    // Never automatically in a dev build: it would offer to install a release over
+    // itself. Help ▸ Check for Updates still runs the real check there.
+    if (busy || import.meta.env?.DEV) return;
     try {
       const update = await platform.checkForUpdate();
       if (update && update.version !== offered?.version) offer(update);

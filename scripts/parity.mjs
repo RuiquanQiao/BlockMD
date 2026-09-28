@@ -870,7 +870,13 @@ const checks = {
     await t.open('x\n'); await t.stub({ message: 'true' });
     await t.menu('Help', 'Check for Updates');
     await sleep(500);
-    expect((await t.asked()).some(([k, m]) => k === 'message' && /latest version|update/i.test(m)), 'Check for Updates said nothing');
+    // The real check against GitHub, even in this dev build: "latest version" or the
+    // update card. "Couldn't check…" is a failure — accepting any mention of "update"
+    // let a missing checkForUpdate ship in 0.1.3 and 0.1.4.
+    await sleep(1500);
+    const asked = await t.asked();
+    const card = await ev(`!document.querySelector('.update-bar').hidden`);
+    expect(card || asked.some(([k, m]) => k === 'message' && /on the latest version/.test(m)), 'Check for Updates: ' + J(asked));
   },
   async 'about'() {
     await t.open('x\n'); await t.stub({ message: 'true' });

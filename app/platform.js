@@ -346,6 +346,29 @@ export async function saveAsset(docPath, name, bytes) {
   throw new Error('Could not find a free file name in the assets folder.');
 }
 
+/**
+ * A newer published release, or null. Desktop only: a browser tab has nothing to
+ * update. In dev builds this is only called from Help ▸ Check for Updates (never
+ * automatically — a dev build must not offer to install a release over itself), so
+ * the real check still runs somewhere before release.
+ *
+ * (These two functions were once deleted by accident, and because updater.js reaches
+ * them as `platform.checkForUpdate`, nothing failed: 0.1.3 and 0.1.4 shipped unable to
+ * find updates. test/app-imports.test.js now fails on any missing platform member.)
+ * @returns {Promise<import('@tauri-apps/plugin-updater').Update|null>}
+ */
+export async function checkForUpdate() {
+  if (!isDesktop) return null;
+  const { check } = await import('@tauri-apps/plugin-updater');
+  return check();
+}
+
+/** Restart the app after an update has been installed (macOS; Windows restarts by itself). */
+export async function relaunch() {
+  const { relaunch: restart } = await import('@tauri-apps/plugin-process');
+  await restart();
+}
+
 /* ------------------------------------------------------------------ browser */
 
 /**
