@@ -76,11 +76,13 @@ test('Layer 2 · dirtying one block must not touch bytes outside it', async (t) 
         const out = doc.save({ dirty: [i] });
         const b = doc.blocks[i];
 
-        const prefixExpected = doc.restoreEol(doc.body.slice(0, b.start));
+        // The original bytes, with their own line endings. (This used to convert every
+        // LF to the file's EOL — which encoded the mixed-EOL bug instead of catching it.)
+        const prefixExpected = doc.rawSlice(0, b.start);
         const prefixActual = out.slice(doc.bom.length, doc.bom.length + prefixExpected.length);
         assert.equal(prefixActual, prefixExpected, `bytes before block #${i} were altered`);
 
-        const suffixExpected = doc.restoreEol(doc.body.slice(b.end));
+        const suffixExpected = doc.rawSlice(b.end, doc.body.length);
         const suffixActual = out.slice(out.length - suffixExpected.length);
         assert.equal(suffixActual, suffixExpected, `bytes after block #${i} were altered`);
       }

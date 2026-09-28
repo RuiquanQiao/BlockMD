@@ -142,6 +142,11 @@ export const fixtures = [
     why: 'an unclosed <details> and a stray bmd-col must stay raw HTML, not swallow the rest of the file',
     src: '<details>\n<summary>Never closed</summary>\n\nText.\n\n<div class="bmd-col">\n\nStray.\n\n</div>\n\nEnd.\n',
   },
+  {
+    name: '27-mixed-eol',
+    why: 'CRLF and LF in one file (pasted from two sources): every line must keep its own ending; it used to come back all-CRLF',
+    src: '# Title\r\n\r\nWindows line\r\nUnix line\n\n- a\r\n- b\n',
+  },
 ];
 
 /** Look up a fixture by name. */

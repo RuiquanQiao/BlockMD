@@ -56,6 +56,17 @@ export class DocumentSession {
       types.push(n.type.name);
     });
 
+    // An editor is never empty. A file with nothing to show — empty, blank lines,
+    // only link definitions — has no visible blocks on disk, yet the editor shows one
+    // empty paragraph. That paragraph is not a block from the file: treat it as new
+    // (no baseline), so it maps to nothing and is written only once it has content.
+    // Without this, every new, empty .md failed the mapping and could not be saved.
+    if (this.doc.visibleIndices().length === 0 && doc.childCount === 1 &&
+        doc.firstChild.type.name === 'paragraph' && doc.firstChild.content.size === 0) {
+      this.baselineNodes = [];
+      types.length = 0;
+    }
+
     const mapping = buildMapping(this.doc.blocks, types);
     this.mapping = mapping;
     const gate = guardSave(mapping);
@@ -122,6 +133,13 @@ export class DocumentSession {
     const nodes = this.currentNodes();
     const plan = reconcileByIdentity(this.baselineNodes, nodes);
     const styles = this.styleSources(plan, nodes);
+
+    // The one empty paragraph of an empty-looking file (see attach) writes nothing
+    // until it has content, so opening and saving such a file changes no byte.
+    if (nodes.length === 1 && this.baselineNodes.length === 0 &&
+        nodes[0].type.name === 'paragraph' && nodes[0].content.size === 0) {
+      return { visibleOrder: [], reused: 0, fresh: 0 };
+    }
 
     let reused = 0;
     let fresh = 0;

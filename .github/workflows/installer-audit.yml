@@ -38,7 +38,11 @@ jobs:
           workspaces: src-tauri
 
       - run: npm ci
-      - run: npm run desktop:build
+      # Update files (.sig, latest.json) need the signing key, which only the release
+      # workflow holds. This audit tests install and uninstall, not updates — build
+      # without them. (Without this override every audit since v0.1.1 failed with
+      # "A public key has been found, but no private key".)
+      - run: npm run desktop:build -- --config '{"bundle":{"createUpdaterArtifacts":false}}'
 
       # The runner must start clean, or every later verdict is meaningless: leftover
       # state would let a broken uninstaller look correct. Asserting it here is what

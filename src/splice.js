@@ -105,9 +105,19 @@ export class MdDoc {
     this.bom = source.startsWith(BOM) ? BOM : '';
     const raw = this.bom ? source.slice(1) : source;
 
-    // If CRLF appears anywhere, restore CRLF on save.
-    this.eol = raw.includes('\r\n') ? '\r\n' : '\n';
+    // Parsing happens on LF (`body`), but bytes are always copied from `raw`, which
+    // keeps every line ending exactly as it was. A file mixing CRLF and LF used to be
+    // saved all-CRLF: a byte change on open-and-save, with no edits (P0).
+    // `crAt` lists the body offsets where a CR was dropped, to map body offsets back.
+    this.raw = raw;
     this.body = raw.replace(/\r\n/g, '\n');
+    this.crAt = [];
+    for (let i = 0, dropped = 0; i < raw.length; i++) {
+      if (raw[i] === '\r' && raw[i + 1] === '\n') this.crAt.push(i - dropped++);
+    }
+    // New text (edited or inserted blocks) gets the file's usual line ending.
+    const lf = (this.body.match(/\n/g) || []).length - this.crAt.length;
+    this.eol = this.crAt.length > lf ? '\r\n' : '\n';
 
     this.tree = parseMarkdown(this.body);
 
@@ -128,20 +138,35 @@ export class MdDoc {
       if (!hidden) visibleSeen++;
     }
 
-    // gaps[i] is the text before block i; gaps[n] is the trailing remainder.
+    // gaps[i] is the text before block i; gaps[n] is the trailing remainder. Raw bytes.
     this.gaps = [];
     let cursor = 0;
     for (const b of this.blocks) {
-      this.gaps.push(this.body.slice(cursor, b.start));
+      this.gaps.push(this.rawSlice(cursor, b.start));
       cursor = b.end;
     }
-    this.gaps.push(this.body.slice(cursor));
+    this.gaps.push(this.rawSlice(cursor, this.body.length));
   }
 
-  /** Original bytes of block i. */
+  /** Map a body (LF) offset to the raw text: add the CRs dropped before it. */
+  toRaw(offset) {
+    let lo = 0, hi = this.crAt.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (this.crAt[mid] < offset) lo = mid + 1; else hi = mid;
+    }
+    return offset + lo;
+  }
+
+  /** The original bytes between two body offsets. */
+  rawSlice(start, end) {
+    return this.raw.slice(this.toRaw(start), this.toRaw(end));
+  }
+
+  /** Original bytes of block i, with its own line endings. */
   sourceOf(i) {
     const b = this.blocks[i];
-    return this.body.slice(b.start, b.end);
+    return this.rawSlice(b.start, b.end);
   }
 
   /** Indices of blocks the editor can see. */
@@ -180,36 +205,37 @@ export class MdDoc {
     // Fast path: nothing moved and nothing is dirty, so return the source untouched.
     // Byte identity here is guaranteed by construction.
     if (unchangedOrder && dirty.size === 0) {
-      return this.bom + this.restoreEol(this.body);
+      return this.bom + this.raw;
     }
 
     let out = '';
     for (let slot = 0; slot < order.length; slot++) {
       // Gaps are taken by output position; beyond the original count, use a blank line.
-      out += slot < this.gaps.length - 1 ? this.gaps[slot] : slot === 0 ? '' : '\n\n';
+      out += slot < this.gaps.length - 1 ? this.gaps[slot] : slot === 0 ? '' : this.restoreEol('\n\n');
 
       const entry = order[slot];
 
       // Brand new content: no original bytes exist, so take the editor's text.
       if (entry !== null && typeof entry === 'object') {
-        out += String(entry.text ?? '').replace(/\n+$/, '');
+        out += this.restoreEol(String(entry.text ?? '').replace(/\n+$/, ''));
         continue;
       }
 
       const i = entry;
       if (dirty.has(i)) {
         const node = nodes.get(i) ?? this.blocks[i].node;
-        out += toMarkdown(node, {
+        out += this.restoreEol(toMarkdown(node, {
           extensions: serializeExtensions(),
           ...inferOptions(this.sourceOf(i)),
-        }).replace(/\n$/, '');
+        }).replace(/\n$/, ''));
       } else {
         out += this.sourceOf(i);
       }
     }
     out += this.gaps[this.gaps.length - 1];
 
-    return this.bom + this.restoreEol(out);
+    // Copied bytes already carry their own line endings; only new text was converted.
+    return this.bom + out;
   }
 
   /** @param {string} s */
