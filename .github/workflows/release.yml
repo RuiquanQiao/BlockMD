@@ -62,19 +62,19 @@ jobs:
         run: npm test
 
       # Signing is what lets installed copies update themselves: the updater only accepts
-      # files signed by this key (public half in tauri.conf.json). tauri-action also
-      # uploads latest.json, the manifest the app polls; each matrix job merges its
-      # platform into it. Nothing reaches users until the draft is published.
+      # files signed by this key (public half in tauri.conf.json). Nothing reaches users
+      # until the draft is published.
+      #
+      # latest.json, the manifest the app polls, is written by the `manifest` job below,
+      # not here: when every matrix job merges itself into one shared asset, jobs that
+      # finish together race. In v0.1.2 the Windows job lost that race and failed.
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          includeUpdaterJson: true
-          # The generic windows-x86_64 entry is what an updater falls back to when it
-          # can't tell how it was installed; point it at the normal installer.
-          updaterJsonPreferNsis: true
+          includeUpdaterJson: false
           args: ${{ matrix.args }}
           tagName: ${{ github.ref_name }}
           releaseName: 'BlockMD ${{ github.ref_name }}'
@@ -108,3 +108,18 @@ jobs:
 
             **macOS** — the build is unsigned, so the first launch needs
             right-click → Open.
+
+  # Runs once, after every platform has uploaded its signed bundle. Refuses to write a
+  # manifest with a platform missing, so a half-built release can't strand anyone.
+  manifest:
+    name: Update manifest (latest.json)
+    needs: installers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/updater-manifest.mjs "${{ github.ref_name }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
