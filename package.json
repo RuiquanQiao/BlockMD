@@ -1,6 +1,6 @@
 {
   "name": "blockmd",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "A Notion-style block editor whose files are just plain .md",
