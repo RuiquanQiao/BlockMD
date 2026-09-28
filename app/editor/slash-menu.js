@@ -12,29 +12,15 @@
 import { slashFactory, SlashProvider } from '@milkdown/kit/plugin/slash';
 import { editorViewCtx } from '@milkdown/kit/core';
 import { TextSelection } from '@milkdown/prose/state';
+import { BLOCK_TYPES, blockAtSelection, insertDivider, turnInto } from './block-types.js';
 
 export const slash = slashFactory('bmdSlash');
 
-/** Menu entries. Every one of these is expressible in standard Markdown. */
+/** Menu entries: every block type, plus the divider, which has no text to carry. */
 const ITEMS = [
-  { id: 'text', label: 'Text', hint: 'Plain paragraph', keys: ['text', 'p', 'paragraph', 'plain'], run: setParagraph },
-  { id: 'h1', label: 'Heading 1', hint: '# Heading', keys: ['h1', 'heading1', 'title'], run: (v) => setHeading(v, 1) },
-  { id: 'h2', label: 'Heading 2', hint: '## Heading', keys: ['h2', 'heading2'], run: (v) => setHeading(v, 2) },
-  { id: 'h3', label: 'Heading 3', hint: '### Heading', keys: ['h3', 'heading3'], run: (v) => setHeading(v, 3) },
-  { id: 'ul', label: 'Bulleted list', hint: '- item', keys: ['ul', 'list', 'bullet', 'unordered'], run: (v) => wrapList(v, 'bullet_list') },
-  { id: 'ol', label: 'Numbered list', hint: '1. item', keys: ['ol', 'ordered', 'number'], run: (v) => wrapList(v, 'ordered_list') },
-  { id: 'todo', label: 'Task list', hint: '- [ ] task', keys: ['todo', 'task', 'check', 'checkbox'], run: (v) => wrapList(v, 'bullet_list', true) },
-  { id: 'quote', label: 'Quote', hint: '> quoted text', keys: ['quote', 'blockquote', 'cite'], run: wrapQuote },
-  { id: 'code', label: 'Code block', hint: '``` fenced code', keys: ['code', 'pre', 'fence'], run: setCodeBlock },
-  { id: 'hr', label: 'Divider', hint: '--- rule', keys: ['hr', 'divider', 'rule', 'separator'], run: insertHr },
+  ...BLOCK_TYPES.map((t) => ({ ...t, run: (v) => turnInto(v, blockAtSelection(v.state), t.id) })),
+  { id: 'hr', label: 'Divider', hint: '--- rule', keys: ['hr', 'divider', 'rule', 'separator'], run: insertDivider },
 ];
-
-let activeProvider = null;
-
-/** Used by the add button: open the menu right after inserting a block. */
-export function openSlashMenuAt() {
-  if (activeProvider) activeProvider.show();
-}
 
 /**
  * @param {any} ctx Milkdown ctx
@@ -156,15 +142,10 @@ export function createSlashMenu(ctx) {
     },
   });
 
-  activeProvider = provider;
-
   return {
     view: () => ({
       update: (view, prevState) => provider.update(view, prevState),
-      destroy: () => {
-        provider.destroy();
-        if (activeProvider === provider) activeProvider = null;
-      },
+      destroy: () => provider.destroy(),
     }),
     props: {
       handleKeyDown: (_view, event) => {
@@ -198,53 +179,3 @@ export function createSlashMenu(ctx) {
   };
 }
 
-// ——— Commands behind each menu entry ———
-
-function setParagraph(view) {
-  const { state, dispatch } = view;
-  const { $from } = state.selection;
-  dispatch(state.tr.setBlockType($from.before(), $from.after(), state.schema.nodes.paragraph));
-}
-
-function setHeading(view, level) {
-  const { state, dispatch } = view;
-  const { $from } = state.selection;
-  dispatch(state.tr.setBlockType($from.before(), $from.after(), state.schema.nodes.heading, { level }));
-}
-
-function setCodeBlock(view) {
-  const { state, dispatch } = view;
-  const { $from } = state.selection;
-  dispatch(state.tr.setBlockType($from.before(), $from.after(), state.schema.nodes.code_block));
-}
-
-function wrapList(view, typeName, checked = false) {
-  const { state, dispatch } = view;
-  const listType = state.schema.nodes[typeName];
-  const itemType = state.schema.nodes.list_item;
-  if (!listType || !itemType) return;
-  const { $from } = state.selection;
-  const content = $from.parent.content;
-  const attrs =
-    checked && itemType.spec.attrs && 'checked' in itemType.spec.attrs ? { checked: false } : null;
-  const item = itemType.create(attrs, state.schema.nodes.paragraph.create(null, content));
-  const list = listType.create(null, item);
-  dispatch(state.tr.replaceWith($from.before(), $from.after(), list).scrollIntoView());
-}
-
-function wrapQuote(view) {
-  const { state, dispatch } = view;
-  const quote = state.schema.nodes.blockquote;
-  if (!quote) return;
-  const { $from } = state.selection;
-  const node = quote.create(null, $from.parent.copy($from.parent.content));
-  dispatch(state.tr.replaceWith($from.before(), $from.after(), node).scrollIntoView());
-}
-
-function insertHr(view) {
-  const { state, dispatch } = view;
-  const hr = state.schema.nodes.hr ?? state.schema.nodes.horizontal_rule;
-  if (!hr) return;
-  const { $from } = state.selection;
-  dispatch(state.tr.replaceWith($from.before(), $from.after(), hr.create()).scrollIntoView());
-}

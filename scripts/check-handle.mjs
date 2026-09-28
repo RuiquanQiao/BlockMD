@@ -142,7 +142,19 @@ for (const width of WIDTHS) {
   }
 
   const results = [];
-  for (const block of layout.blocks) {
+  for (const listed of layout.blocks) {
+    // Bring the block on screen first and re-measure it. A document taller than the
+    // viewport otherwise sends the pointer below the window, where it hovers nothing,
+    // and the handle reports as "not on this block" while still showing the last one.
+    const block = {
+      ...listed,
+      ...(await cdp.evaluate(`(() => {
+        const el = window.__bmd.view().dom.children[${listed.index}];
+        el.scrollIntoView({ block: 'center' });
+        const r = el.getBoundingClientRect();
+        return { left: r.left, top: r.top, bottom: r.bottom, height: r.height };
+      })()`)),
+    };
     // Two moves: the plugin throttles pointermove, so a lone event can be dropped.
     const y = block.top + Math.min(8, block.height / 2);
     await hover(cdp, block.left + 24, y);

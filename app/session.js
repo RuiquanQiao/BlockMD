@@ -20,6 +20,7 @@ import { editorViewCtx, serializerCtx } from '@milkdown/kit/core';
 import { MdDoc } from '../src/splice.js';
 import { buildMapping, guardSave } from '../src/mapping.js';
 import { reconcileByIdentity } from '../src/reconcile.js';
+import { restoreCalloutMarkers } from './editor/callout.js';
 
 export class DocumentSession {
   /**
@@ -67,7 +68,7 @@ export class DocumentSession {
     const schema = this.ctx.get(editorViewCtx).state.schema;
     const serialize = this.ctx.get(serializerCtx);
     const wrapper = schema.nodes.doc.create(null, [node]);
-    return serialize(wrapper).replace(/\n+$/, '');
+    return restoreCalloutMarkers(serialize(wrapper)).replace(/\n+$/, '');
   }
 
   /**

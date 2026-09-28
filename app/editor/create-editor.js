@@ -16,6 +16,7 @@ import { block } from '@milkdown/kit/plugin/block';
 import { alignmentPlugins } from '../../src/milkdown-adapter.js';
 import { createBlockHandle } from './block-handle.js';
 import { createSlashMenu, slash } from './slash-menu.js';
+import { calloutPlugin } from './callout.js';
 
 /**
  * @param {object} opts
@@ -84,6 +85,7 @@ function buildEditor({ root, value, onChange }) {
     .use(listener)
     .use(history)
     .use(alignmentPlugins)
+    .use(calloutPlugin)
     .use(block)
     .use(slash)
     .create();

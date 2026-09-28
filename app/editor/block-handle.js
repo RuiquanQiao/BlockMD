@@ -2,7 +2,8 @@
  * Drag handle — the view layer for plugin-block.
  *
  * plugin-block handles positioning, hit-testing the hovered block, and native drag
- * behaviour. This file only supplies the appearance and the "add block" button.
+ * behaviour. This file supplies the appearance, the "add block" button and the block
+ * menu behind the grip (see block-menu.js).
  *
  * Note that reordering by drag triggers **no** re-serialization on save: the moved
  * block carries its original bytes along (see identity reconciliation). That is the
@@ -13,7 +14,7 @@ import { BlockProvider } from '@milkdown/kit/plugin/block';
 import { editorViewCtx } from '@milkdown/kit/core';
 import { NodeSelection, TextSelection } from '@milkdown/prose/state';
 import { offset } from '@floating-ui/dom';
-import { openSlashMenuAt } from './slash-menu.js';
+import { createBlockMenu } from './block-menu.js';
 import { guardHandlePosition } from './handle-guard.js';
 
 /** Gap between the handle's right edge and the left edge of the text column. */
@@ -50,7 +51,7 @@ export function createBlockHandle(ctx, _view) {
   grip.type = 'button';
   grip.className = 'bmd-handle-btn bmd-handle-grip';
   grip.innerHTML = GRIP;
-  grip.title = 'Drag to move, click to select';
+  grip.title = 'Drag to move, click for options';
   grip.setAttribute('aria-label', 'Drag to move this block');
   // Do not set draggable here: BlockProvider sets it on the whole handle element and
   // binds dragstart to it. Setting it again on a child creates a nested drag source.
@@ -88,7 +89,13 @@ export function createBlockHandle(ctx, _view) {
   // throws, which it swallows with an empty catch block — extremely hard to diagnose.
   // The real nudge lives in create-editor.js, after the editor is fully built.
 
-  // Add button: insert an empty paragraph after the current block, then open the menu.
+  // Add button: insert a paragraph holding just `/` after the current block, which is
+  // what Notion does — the slash menu then opens by its ordinary rule, so choosing a
+  // type, filtering by typing and Escape all behave exactly as when typing `/`.
+  //
+  // Showing the menu directly on an empty paragraph does not work: plugin-slash
+  // re-evaluates shouldShow 200 ms after every transaction, finds no `/`, and hides
+  // it again. That was the old behaviour — the menu flashed and vanished.
   add.addEventListener('click', (e) => {
     e.preventDefault();
     const active = provider.active;
@@ -96,29 +103,27 @@ export function createBlockHandle(ctx, _view) {
     const view = ctx.get(editorViewCtx);
     const { state, dispatch } = view;
     const insertPos = active.$pos.pos + active.node.nodeSize;
-    const para = state.schema.nodes.paragraph.create();
+    const para = state.schema.nodes.paragraph.create(null, state.schema.text('/'));
     const tr = state.tr.insert(insertPos, para);
-    tr.setSelection(TextSelection.near(tr.doc.resolve(insertPos + 1)));
+    tr.setSelection(TextSelection.create(tr.doc, insertPos + 2));
     dispatch(tr.scrollIntoView());
     view.focus();
-    openSlashMenuAt(ctx);
   });
 
-  // Clicking the grip selects the whole block, which makes keyboard use and deletion
-  // straightforward.
+  // Clicking the grip selects the block and opens the block menu (Turn into /
+  // Duplicate / Delete). The selection itself comes from plugin-block's mousedown;
+  // this only adds the menu. Dragging never produces a click, so drags are unaffected.
+  const menu = createBlockMenu({ getView: () => ctx.get(editorViewCtx) });
   grip.addEventListener('click', (e) => {
     e.preventDefault();
     const active = provider.active;
     if (!active) return;
     const view = ctx.get(editorViewCtx);
-    const { state, dispatch } = view;
-    try {
-      const sel = NodeSelection.create(state.doc, active.$pos.pos);
-      dispatch(state.tr.setSelection(sel));
-      view.focus();
-    } catch {
-      /* Some block types cannot be a NodeSelection target; ignore. */
+    if (NodeSelection.isSelectable(active.node)) {
+      const { state } = view;
+      view.dispatch(state.tr.setSelection(NodeSelection.create(state.doc, active.$pos.pos)));
     }
+    menu.open(grip, { pos: active.$pos.pos, node: active.node });
   });
 
   // Nothing is drawn until the position has been checked against the active block.
@@ -141,6 +146,7 @@ export function createBlockHandle(ctx, _view) {
     update: (updatedView, prevState) => provider.update(updatedView, prevState),
     destroy: () => {
       unguard();
+      menu.destroy();
       provider.destroy();
     },
   };

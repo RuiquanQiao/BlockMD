@@ -146,7 +146,12 @@ body {
 /* Generous space above the first block, and enough below the last one that it can be
    scrolled to the middle of the window rather than sticking to the bottom edge. */
 .pane-editor { padding: 40px 0 40vh; }
+/* position: relative is load-bearing. The handle, slash menu and block menu are
+   position: absolute and get appended inside the editor; without a positioned
+   ancestor here, their containing block is the whole page — *outside* the scrolling
+   .pane — so they stayed put on screen while the text scrolled out from under them. */
 .editor-host {
+  position: relative;
   max-width: calc(var(--column) + var(--gutter) * 2);
   margin: 0 auto;
   padding: 0 var(--gutter);
@@ -339,9 +344,15 @@ body {
    Use :not([data-show="true"]) rather than [data-show="false"], because the
    attribute does not exist at all until the first show. */
 .bmd-handle,
-.bmd-slash { position: absolute; top: 0; left: 0; }
+.bmd-slash,
+.bmd-menu { position: absolute; top: 0; left: 0; }
+/* Hidden with visibility, never display: none. Both providers compute the position
+   *before* flipping data-show on, and a display: none element has no offsetParent —
+   floating-ui then falls back to viewport coordinates, which are wrong by exactly the
+   offset of .editor-host (100px in practice: the handle landed a block too low). */
 .bmd-handle:not([data-show='true']),
-.bmd-slash:not([data-show='true']) { display: none; }
+.bmd-slash:not([data-show='true']),
+.bmd-menu:not([data-show='true']) { visibility: hidden; pointer-events: none; }
 
 /* The handle stays invisible until handle-guard.js has checked its position against
    the active block. data-show alone is not enough: the plugin sets it from an async
@@ -392,7 +403,88 @@ body {
 }
 .bmd-slash-empty { padding: 12px; font-size: 13px; color: var(--ink-3); text-align: center; }
 
+/* ——— Block menu (click the grip) ——— */
+.bmd-menu {
+  min-width: 220px; max-height: 360px; overflow-y: auto;
+  background: var(--bg);
+  border-radius: 6px;
+  box-shadow:
+    rgba(15, 15, 15, 0.05) 0 0 0 1px,
+    rgba(15, 15, 15, 0.1) 0 3px 6px,
+    rgba(15, 15, 15, 0.2) 0 9px 24px;
+  padding: 6px 4px;
+  z-index: 41;
+}
+.bmd-menu-item {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  font: inherit; font-size: 14px; text-align: left;
+  padding: 5px 10px; border: 0; border-radius: 4px;
+  background: transparent; color: var(--ink); cursor: pointer;
+}
+.bmd-menu-item.is-active,
+.bmd-menu-item.is-open { background: var(--hover); }
+.bmd-menu-item.is-disabled { color: var(--ink-3); cursor: default; }
+.bmd-menu-tail {
+  margin-left: auto; display: inline-flex; align-items: center;
+  font-size: 12px; color: var(--ink-3);
+}
+.bmd-menu-tail svg { width: 14px; height: 14px; stroke: currentColor; }
+.bmd-menu-item[aria-checked='true'] .bmd-menu-tail { color: var(--ink); }
+
+/* ——— Callouts: `> [!NOTE]` rendered as Notion's callout block ———
+   Decorations from callout.js add the classes; the document is an ordinary blockquote. */
+:root {
+  --callout-gray: rgba(241, 241, 239, 1);
+  --callout-blue: rgba(231, 243, 248, 1);
+  --callout-green: rgba(237, 243, 236, 1);
+  --callout-purple: rgba(244, 240, 247, 1);
+  --callout-yellow: rgba(251, 243, 219, 1);
+  --callout-red: rgba(253, 235, 236, 1);
+}
 @media (prefers-color-scheme: dark) {
+  :root {
+    --callout-gray: rgba(255, 255, 255, 0.055);
+    --callout-blue: rgba(35, 131, 226, 0.14);
+    --callout-green: rgba(45, 153, 100, 0.14);
+    --callout-purple: rgba(154, 109, 215, 0.16);
+    --callout-yellow: rgba(223, 171, 1, 0.13);
+    --callout-red: rgba(255, 115, 105, 0.13);
+  }
+}
+.milkdown blockquote.bmd-callout {
+  --callout-bg: var(--callout-gray);
+  --callout-icon: '💡';
+  position: relative;
+  margin: 6px 0;
+  padding: 14px 16px 14px 46px;
+  border-left: 0;
+  border-radius: 4px;
+  background: var(--callout-bg);
+}
+.milkdown blockquote.bmd-callout::before {
+  content: var(--callout-icon);
+  position: absolute; left: 16px; top: 15px;
+  font-size: 18px; line-height: 1.3;
+  pointer-events: none;
+}
+.milkdown blockquote.bmd-callout[data-callout='note']      { --callout-bg: var(--callout-blue);   --callout-icon: 'ℹ️'; }
+.milkdown blockquote.bmd-callout[data-callout='tip']       { --callout-bg: var(--callout-green);  --callout-icon: '💡'; }
+.milkdown blockquote.bmd-callout[data-callout='important'] { --callout-bg: var(--callout-purple); --callout-icon: '❗'; }
+.milkdown blockquote.bmd-callout[data-callout='warning']   { --callout-bg: var(--callout-yellow); --callout-icon: '⚠️'; }
+.milkdown blockquote.bmd-callout[data-callout='caution']   { --callout-bg: var(--callout-red);    --callout-icon: '🛑'; }
+/* The marker stays real, editable text — change NOTE to TIP and the callout follows —
+   but reads as a quiet label rather than as syntax. */
+.bmd-callout-marker {
+  font-size: 0.8em; font-weight: 600; letter-spacing: 0.04em;
+  color: var(--ink-2);
+}
+.bmd-callout-punct { opacity: 0.4; font-weight: 400; }
+/* The soft break after the marker renders as a space by default; here it ends the
+   title line. */
+.milkdown .bmd-callout-break { display: block; height: 0; overflow: hidden; }
+
+@media (prefers-color-scheme: dark) {
+  .bmd-menu,
   .bmd-slash {
     box-shadow:
       rgba(15, 15, 15, 0.1) 0 0 0 1px,
