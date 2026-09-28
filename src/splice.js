@@ -68,6 +68,24 @@ export function inferOptions(raw) {
 }
 
 /**
+ * Rewrite freshly serialized Markdown in the style of some original text.
+ *
+ * The editor's serializer has one fixed style (`*` bullets, among others), so a block
+ * the user edited would otherwise come back in that style rather than the author's —
+ * ticking one checkbox in a `-` list rewrote every bullet in it. Parsing and printing
+ * go through remark-config, the same as everything else here (iron rule 2).
+ *
+ * @param {string} text Markdown produced by the editor for one block
+ * @param {string} styleSource The block it replaces, or the whole document for a new one
+ */
+export function restyle(text, styleSource) {
+  return toMarkdown(fromMarkdown(text, parseOptions()), {
+    extensions: serializeExtensions(),
+    ...inferOptions(styleSource),
+  });
+}
+
+/**
  * A Markdown document as seen by the splice layer.
  *
  * Three details carry the byte safety:

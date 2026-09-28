@@ -2,6 +2,10 @@
 
 **A Notion-style block editor whose files are just plain `.md`.**
 
+![Dragging a block and editing a sentence in BlockMD, with the file's raw Markdown shown alongside](site/demo.gif)
+
+**[Download for Windows and macOS](https://ruiquanqiao.github.io/BlockMD/download.html)** · free and open source
+
 Open a Markdown file, edit it with drag handles and a slash menu, save it — and the
 bytes you didn't touch come back exactly as they were. Not "semantically equivalent".
 Byte-for-byte identical.
@@ -111,7 +115,7 @@ npm install
 npm run desktop:build
 ```
 
-The installers land in `src-tauri/target/release/bundle/` — a 1.3 MB NSIS `-setup.exe`
+The installers land in `src-tauri/target/release/bundle/` — a 2 MB NSIS `-setup.exe`
 and a 1.8 MB `.msi` on Windows. For comparison, MarkText ships 128 MB and SiYuan 237 MB;
 the difference is Tauri reusing the system WebView instead of bundling Chromium.
 
@@ -133,7 +137,7 @@ Both installers register BlockMD identically. The `.msi` exists for unattended
 deployment (`msiexec /i BlockMD_x64_en-US.msi /qn`); the `-setup.exe` is the smaller
 and more usual choice. Either one needs an internet connection at install time if the
 Edge WebView2 runtime is missing — it is preinstalled on Windows 11, and bundling it
-offline would add ~130 MB to a 1.3 MB installer.
+offline would add ~130 MB to a 2 MB installer.
 
 ### Checking what an installer leaves behind
 

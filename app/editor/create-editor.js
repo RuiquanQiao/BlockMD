@@ -17,6 +17,7 @@ import { alignmentPlugins } from '../../src/milkdown-adapter.js';
 import { createBlockHandle } from './block-handle.js';
 import { createSlashMenu, slash } from './slash-menu.js';
 import { calloutPlugin } from './callout.js';
+import { taskListPlugin } from './task-list.js';
 
 /**
  * @param {object} opts
@@ -86,6 +87,7 @@ function buildEditor({ root, value, onChange }) {
     .use(history)
     .use(alignmentPlugins)
     .use(calloutPlugin)
+    .use(taskListPlugin)
     .use(block)
     .use(slash)
     .create();

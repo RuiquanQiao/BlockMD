@@ -13,6 +13,7 @@
 import { createEditor, editorViewCtx } from './editor/create-editor.js';
 import { DocumentSession } from './session.js';
 import * as platform from './platform.js';
+import { startUpdateChecks } from './updater.js';
 
 const DEMO = `# BlockMD demo
 
@@ -318,4 +319,5 @@ async function guardWindowClose() {
   }
   if (!booted) await load(DEMO, 'demo.md');
   guardWindowClose();
+  startUpdateChecks({ isDirty });
 })();

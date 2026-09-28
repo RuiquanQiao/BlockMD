@@ -192,3 +192,45 @@ test('delete · the last list item takes its list along; the last block leaves a
     await ed.dispose();
   }
 });
+
+// ——— An edited block is rewritten, but in the author's style ———
+// Milkdown's serializer always writes `*` bullets. Before this was fixed, ticking one
+// checkbox (or fixing a typo) in a `-` list rewrote every bullet in that list.
+
+test('edit · ticking a task keeps the list\'s `-` bullets', async () => {
+  const ed = await open('# T\n\n- [ ] a\n- [x] b\n\nend\n');
+  try {
+    const list = ed.block(1);
+    const item = list.node.child(0);
+    ed.view.dispatch(ed.view.state.tr.setNodeMarkup(list.pos + 1, undefined, { ...item.attrs, checked: true }));
+    assert.equal(ed.session.save(), '# T\n\n- [x] a\n- [x] b\n\nend\n');
+  } finally {
+    await ed.dispose();
+  }
+});
+
+test('edit · typing in a `-` list keeps `-`; typing in a `+` list keeps `+`', async () => {
+  for (const bullet of ['-', '+']) {
+    const ed = await open(`${bullet} one\n${bullet} two\n`);
+    try {
+      ed.view.dispatch(ed.view.state.tr.insertText('!', 6)); // after "one"
+      assert.equal(ed.session.save(), `${bullet} one!\n${bullet} two\n`);
+    } finally {
+      await ed.dispose();
+    }
+  }
+});
+
+test('edit · a brand-new list follows the document\'s bullet style', async () => {
+  const ed = await open('- a\n\ntext\n');
+  try {
+    const { schema } = ed.view.state;
+    const list = schema.nodes.bullet_list.create(null, [
+      schema.nodes.list_item.create(null, [schema.nodes.paragraph.create(null, schema.text('new'))]),
+    ]);
+    ed.view.dispatch(ed.view.state.tr.insert(ed.view.state.doc.content.size, list));
+    assert.equal(ed.session.save(), '- a\n\ntext\n\n- new\n');
+  } finally {
+    await ed.dispose();
+  }
+});

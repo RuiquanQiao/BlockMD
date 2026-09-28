@@ -44,6 +44,13 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![read_file, write_file, startup_file])
         .setup(|app| {
+            // Self-update from GitHub Releases (see app/updater.js). The process plugin
+            // is only here to relaunch once an update is installed.
+            #[cfg(desktop)]
+            {
+                app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
+                app.handle().plugin(tauri_plugin_process::init())?;
+            }
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()

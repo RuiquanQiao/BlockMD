@@ -37,7 +37,10 @@
   --font-ui: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text",
     "Segoe UI", "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", "Noto Sans SC",
     Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  /* CJK faces after the Latin ones: none of these monospace fonts has Chinese glyphs,
+     and without a named fallback Windows picks NSimSun (宋体), a serif. */
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono",
+    "PingFang SC", "Microsoft YaHei", "Noto Sans SC", monospace;
 
   --column: 708px;               /* Notion's default page width */
   --gutter: 96px;
@@ -245,12 +248,32 @@ body {
 .milkdown li { margin: 1px 0; padding: 1px 2px; }
 .milkdown li::marker { color: var(--ink-2); }
 .milkdown li p { margin: 0; padding: 0; }
-.milkdown input[type="checkbox"] {
-  accent-color: var(--accent);
-  width: 16px; height: 16px;
-  margin-right: 6px;
-  vertical-align: -2px;
+/* Task items: the GFM preset renders `- [ ]` as a plain `li` with data-checked and
+   draws nothing else, so the box is a pseudo-element in the marker's place. Clicks
+   on it are handled in editor/task-list.js. Checked items look like Notion's: a
+   filled accent box, and the text struck through and faded. */
+.milkdown li[data-item-type="task"] { list-style: none; position: relative; }
+.milkdown li[data-item-type="task"]::before {
+  content: "";
+  position: absolute;
+  left: -1.45em;
+  top: 5px;                      /* 1px item padding + (24px line − 16px box) / 2 */
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--ink-2);
+  border-radius: 3px;
   cursor: pointer;
+}
+.milkdown li[data-item-type="task"]:hover::before { background: var(--hover); }
+.milkdown li[data-item-type="task"][data-checked="true"]::before {
+  border-color: var(--accent);
+  background: var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8.2l2.6 2.6L12 5.4' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 14px no-repeat;
+}
+.milkdown li[data-item-type="task"][data-checked="true"] > p {
+  color: var(--ink-3);
+  text-decoration: line-through;
+  text-decoration-color: var(--ink-3);
 }
 
 .milkdown blockquote {
@@ -271,7 +294,9 @@ body {
   line-height: 1.5;
   tab-size: 2;
 }
-.milkdown pre code { color: var(--ink); background: none; padding: 0; font-size: inherit; }
+/* font-family must be inherited explicitly: the browser's own `code { font-family:
+   monospace }` otherwise wins, and on Chinese Windows "monospace" is NSimSun (宋体). */
+.milkdown pre code { color: var(--ink); background: none; padding: 0; font-size: inherit; font-family: inherit; }
 .milkdown :not(pre) > code {
   font-family: var(--font-mono);
   font-size: 85%;
@@ -496,3 +521,26 @@ body {
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* ——— Update bar (updater.js) ———
+   A floating card above the status bar, shaped like the menus: noticeable, but it
+   never covers the text column's first lines or blocks typing. */
+.update-bar {
+  position: fixed;
+  right: 16px;
+  bottom: 44px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100vw - 32px);
+  padding: 8px 8px 8px 14px;
+  background: var(--bg);
+  border-radius: 8px;
+  box-shadow:
+    rgba(15, 15, 15, 0.05) 0 0 0 1px,
+    rgba(15, 15, 15, 0.1) 0 3px 6px,
+    rgba(15, 15, 15, 0.2) 0 9px 24px;
+  font-size: 14px;
+}
+.update-bar .update-text { margin-right: 8px; }

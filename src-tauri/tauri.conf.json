@@ -27,9 +27,21 @@
       "csp": null
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDdDMTNFMDcwQUYyM0M3Q0EKUldUS3h5T3ZjT0FUZkJjcXJTeEZXTVIrQVkycWxoM3RxY1JVZExnNXpLcnBCbjVlMmNDR3ZObzkK",
+      "endpoints": [
+        "https://github.com/RuiquanQiao/BlockMD/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "category": "Productivity",
     "shortDescription": "A Notion-style block editor whose files are just plain .md",
     "icon": [

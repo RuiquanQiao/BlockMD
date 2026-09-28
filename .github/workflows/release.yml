@@ -61,10 +61,17 @@ jobs:
       - name: Run tests
         run: npm test
 
+      # Signing is what lets installed copies update themselves: the updater only accepts
+      # files signed by this key (public half in tauri.conf.json). tauri-action also
+      # uploads latest.json, the manifest the app polls; each matrix job merges its
+      # platform into it. Nothing reaches users until the draft is published.
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
+          includeUpdaterJson: true
           args: ${{ matrix.args }}
           tagName: ${{ github.ref_name }}
           releaseName: 'BlockMD ${{ github.ref_name }}'
@@ -72,7 +79,8 @@ jobs:
           releaseDraft: true
           prerelease: false
           releaseBody: |
-            Download the installer for your platform below.
+            Download the installer for your platform below. If you already have
+            BlockMD 0.1.1 or later, it offers this update by itself when you open it.
 
             **Windows** — two installers are published and they register BlockMD
             identically; pick either. `-setup.exe` (NSIS) is the smaller one and the
@@ -89,7 +97,7 @@ jobs:
             - **The installer needs an internet connection** if the Microsoft Edge
               WebView2 runtime is not already present. It is preinstalled on Windows 11
               and on most Windows 10 machines. Bundling it offline would add ~130 MB to
-              a 1.3 MB installer, which is not a trade we are willing to make.
+              a 2 MB installer, which is not a trade we are willing to make.
             - **After uninstalling**, if you had set BlockMD as your default `.md` app,
               Windows may still point `.md` at it. That choice lives in a hash-protected
               per-user key that belongs to you, not to our uninstaller, so we do not

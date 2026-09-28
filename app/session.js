@@ -17,7 +17,7 @@
  */
 
 import { editorViewCtx, serializerCtx } from '@milkdown/kit/core';
-import { MdDoc } from '../src/splice.js';
+import { MdDoc, restyle } from '../src/splice.js';
 import { buildMapping, guardSave } from '../src/mapping.js';
 import { reconcileByIdentity } from '../src/reconcile.js';
 import { restoreCalloutMarkers } from './editor/callout.js';
@@ -63,12 +63,38 @@ export class DocumentSession {
     return nodes;
   }
 
-  /** Serialize a single ProseMirror node — only ever used for brand new blocks. */
-  serializeNode(node) {
+  /**
+   * Serialize a single ProseMirror node — only for blocks with no reusable bytes.
+   * @param {any} node
+   * @param {string} styleSource Original text whose style to follow (see `restyle`)
+   */
+  serializeNode(node, styleSource = this.doc.body) {
     const schema = this.ctx.get(editorViewCtx).state.schema;
     const serialize = this.ctx.get(serializerCtx);
     const wrapper = schema.nodes.doc.create(null, [node]);
-    return restoreCalloutMarkers(serialize(wrapper)).replace(/\n+$/, '');
+    // Callout markers last: restyle() prints `[!NOTE]` escaped again.
+    return restoreCalloutMarkers(restyle(serialize(wrapper), styleSource)).replace(/\n+$/, '');
+  }
+
+  /**
+   * For each fresh slot, the original block it most likely replaced: an unreused
+   * baseline node of the same type, paired in document order. An edit in place pairs
+   * with its own original; a block with no candidate follows the whole document.
+   * @returns {Map<number, string>} slot → style source
+   */
+  styleSources(plan, nodes) {
+    const used = new Set(plan.map((e) => e.fromOld).filter((i) => i !== null));
+    const free = this.baselineNodes.map((_, i) => i).filter((i) => !used.has(i));
+    const out = new Map();
+    let from = 0;
+    plan.forEach((entry, slot) => {
+      if (entry.fromOld !== null) return;
+      const k = free.findIndex((i, n) => n >= from && this.baselineNodes[i].type === nodes[slot].type);
+      if (k < 0) return;
+      from = k + 1;
+      out.set(slot, this.doc.sourceOf(this.mapping.pmToBlock[free[k]]));
+    });
+    return out;
   }
 
   /**
@@ -79,13 +105,14 @@ export class DocumentSession {
     if (!this.mapping?.ok) return null;
     const nodes = this.currentNodes();
     const plan = reconcileByIdentity(this.baselineNodes, nodes);
+    const styles = this.styleSources(plan, nodes);
 
     let reused = 0;
     let fresh = 0;
     const visibleOrder = plan.map((entry, slot) => {
       if (entry.fromOld === null) {
         fresh++;
-        return { text: this.serializeNode(nodes[slot]) };
+        return { text: this.serializeNode(nodes[slot], styles.get(slot)) };
       }
       reused++;
       return this.mapping.pmToBlock[entry.fromOld];

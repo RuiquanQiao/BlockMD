@@ -154,6 +154,24 @@ export async function onFileDropped(onFile) {
   });
 }
 
+/**
+ * A newer published release, or null. Desktop release builds only: a browser tab has
+ * nothing to update, and a dev build would always find the last release "newer" or
+ * try to replace itself with an installer.
+ * @returns {Promise<import('@tauri-apps/plugin-updater').Update|null>}
+ */
+export async function checkForUpdate() {
+  if (!isDesktop || import.meta.env?.DEV) return null;
+  const { check } = await import('@tauri-apps/plugin-updater');
+  return check();
+}
+
+/** Restart the app after an update has been installed (macOS; Windows restarts by itself). */
+export async function relaunch() {
+  const { relaunch } = await import('@tauri-apps/plugin-process');
+  await relaunch();
+}
+
 /* ------------------------------------------------------------------ browser */
 
 /**
