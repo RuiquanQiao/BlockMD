@@ -1,6 +1,6 @@
 [package]
 name = "blockmd"
-version = "0.1.1"
+version = "0.1.2"
 description = "A Notion-style block editor whose files are just plain .md"
 authors = ["Ruiquan Qiao"]
 license = "MIT"
