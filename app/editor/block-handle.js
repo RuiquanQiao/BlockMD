@@ -16,6 +16,7 @@ import { NodeSelection, TextSelection } from '@milkdown/prose/state';
 import { offset } from '@floating-ui/dom';
 import { createBlockMenu } from './block-menu.js';
 import { guardHandlePosition } from './handle-guard.js';
+import { OPEN_BLOCK_MENU } from './keymap.js';
 
 /** Gap between the handle's right edge and the left edge of the text column. */
 const HANDLE_GAP = 8;
@@ -32,9 +33,9 @@ const PLUS = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.2v9.6M3.
 
 /**
  * @param {any} ctx Milkdown ctx
- * @param {import('@milkdown/prose/view').EditorView} _view
+ * @param {import('@milkdown/prose/view').EditorView} view
  */
-export function createBlockHandle(ctx, _view) {
+export function createBlockHandle(ctx, view) {
   const content = document.createElement('div');
   content.className = 'bmd-handle';
   content.setAttribute('role', 'toolbar');
@@ -129,6 +130,14 @@ export function createBlockHandle(ctx, _view) {
   // Nothing is drawn until the position has been checked against the active block.
   // See handle-guard.js for why: the plugin reveals the handle from an async callback
   // that can carry a stale position.
+  // Ctrl+/ (keymap.js): the same menu, for the block the cursor is in.
+  const openFromKeyboard = (e) => {
+    const { pos, node } = e.detail;
+    const anchor = view.nodeDOM(pos);
+    menu.open(anchor instanceof HTMLElement ? anchor : view.dom, { pos, node });
+  };
+  view.dom.addEventListener(OPEN_BLOCK_MENU, openFromKeyboard);
+
   const unguard = guardHandlePosition({
     element: content,
     getActive: () => provider.active,
@@ -145,6 +154,7 @@ export function createBlockHandle(ctx, _view) {
   return {
     update: (updatedView, prevState) => provider.update(updatedView, prevState),
     destroy: () => {
+      view.dom.removeEventListener(OPEN_BLOCK_MENU, openFromKeyboard);
       unguard();
       menu.destroy();
       provider.destroy();

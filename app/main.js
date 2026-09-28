@@ -11,9 +11,11 @@
  */
 
 import { createEditor, editorViewCtx } from './editor/create-editor.js';
+import { TextSelection, NodeSelection } from '@milkdown/prose/state';
 import { DocumentSession } from './session.js';
 import * as platform from './platform.js';
 import { startUpdateChecks } from './updater.js';
+import { setImageBase } from './editor/image.js';
 
 const DEMO = `# BlockMD demo
 
@@ -146,6 +148,7 @@ async function load(source, name, path = null) {
     el.editor.textContent = '';
   }
   currentPath = path;
+  setImageBase(path);
   session = new DocumentSession(source, name);
   el.filename.textContent = name;
 
@@ -173,6 +176,11 @@ async function load(source, name, path = null) {
       refresh,
       save: saveFile,
       open: openFile,
+      /** Open a file by path without a dialog — used by scripts/parity.mjs. */
+      async openPath(path) {
+        await load(await platform.readFile(path), platform.basename(path), path);
+      },
+      pm: { TextSelection, NodeSelection },
       /** Direct access to the ProseMirror view, for driving interactions by hand. */
       view() {
         let v = null;
@@ -238,6 +246,7 @@ async function saveFile({ saveAs = false } = {}) {
     }
     await platform.writeFile(path, out);
     currentPath = path;
+    setImageBase(path);
     session.name = platform.basename(path);
     // Adopt what we just wrote as the new baseline, so the indicator goes back to
     // "byte-identical to disk" and the next save reuses these bytes verbatim.

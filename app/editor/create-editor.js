@@ -12,12 +12,20 @@ import { gfm } from '@milkdown/kit/preset/gfm';
 import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
 import { history } from '@milkdown/kit/plugin/history';
 import { block } from '@milkdown/kit/plugin/block';
+import { clipboard } from '@milkdown/kit/plugin/clipboard';
 
 import { alignmentPlugins } from '../../src/milkdown-adapter.js';
 import { createBlockHandle } from './block-handle.js';
 import { createSlashMenu, slash } from './slash-menu.js';
 import { calloutPlugin } from './callout.js';
 import { taskListPlugin } from './task-list.js';
+import { imagePlugin } from './image.js';
+import { keymapPlugin } from './keymap.js';
+import { inputRules } from './input-rules.js';
+import { toolbarPlugin } from './toolbar.js';
+import { findPlugin } from './find.js';
+import { dropPlugin } from './drop.js';
+import { codeBlockPlugin } from './code-block.js';
 
 /**
  * @param {object} opts
@@ -88,6 +96,16 @@ function buildEditor({ root, value, onChange }) {
     .use(alignmentPlugins)
     .use(calloutPlugin)
     .use(taskListPlugin)
+    .use(imagePlugin)
+    // Pasted text is parsed as Markdown, so pasting a README gives blocks, not one paragraph.
+    .use(clipboard)
+    .use(keymapPlugin)
+    .use(inputRules)
+    .use(toolbarPlugin)
+    .use(findPlugin)
+    // Before `block`: this plugin's handleDrop must see a handle drag first.
+    .use(dropPlugin)
+    .use(codeBlockPlugin)
     .use(block)
     .use(slash)
     .create();

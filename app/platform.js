@@ -68,17 +68,58 @@ const MD_FILTER = [{ name: 'Markdown', extensions: ['md', 'markdown', 'mdx', 'tx
  * @param {string} path
  */
 export async function readFile(path) {
+  return decodeFile(await readBytes(path));
+}
+
+/** @param {string} path @returns {Promise<Uint8Array>} */
+async function readBytes(path) {
   const { invoke } = await tauri();
   const res = await invoke('read_file', { path });
   // A command returning `tauri::ipc::Response` arrives as an ArrayBuffer; older
   // shapes arrive as a plain number array. Accept both rather than depend on it.
-  const bytes =
-    res instanceof ArrayBuffer
-      ? new Uint8Array(res)
-      : ArrayBuffer.isView(res)
-        ? new Uint8Array(res.buffer, res.byteOffset, res.byteLength)
-        : Uint8Array.from(res);
-  return decodeFile(bytes);
+  return res instanceof ArrayBuffer
+    ? new Uint8Array(res)
+    : ArrayBuffer.isView(res)
+      ? new Uint8Array(res.buffer, res.byteOffset, res.byteLength)
+      : Uint8Array.from(res);
+}
+
+const IMAGE_TYPES = {
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
+  webp: 'image/webp', svg: 'image/svg+xml', avif: 'image/avif', bmp: 'image/bmp', ico: 'image/x-icon',
+};
+/** Absolute path → object URL, so re-rendering a block doesn't re-read the file. */
+const imageUrls = new Map();
+
+/**
+ * A URL the page can display for an image reference found in a document.
+ *
+ * A relative `src` means "next to the .md file", but the webview resolves it against
+ * the app's own address, where no such file exists — every local image rendered as a
+ * broken icon. Local references are therefore read from disk (through the same
+ * byte-level command as documents; no fs plugin) and shown as object URLs. The `src`
+ * in the document is never touched: this only affects what is displayed.
+ *
+ * @param {string} src The reference exactly as written in the Markdown
+ * @param {string|null} docPath Absolute path of the open document, if it has one
+ * @returns {Promise<string>}
+ */
+export async function imageUrl(src, docPath) {
+  if (!src || /^(https?:|data:|blob:)/i.test(src)) return src;
+  if (!isDesktop || !docPath) return src;
+
+  let path = src.replace(/^file:\/\/\/?/i, '').replace(/[?#].*$/, '');
+  try { path = decodeURI(path); } catch { /* keep it as written */ }
+  const absolute = /^([a-zA-Z]:[\\/]|[\\/])/.test(path);
+  const dir = docPath.slice(0, Math.max(docPath.lastIndexOf('/'), docPath.lastIndexOf('\\')));
+  const full = absolute ? path : `${dir}/${path.replace(/^\.[\\/]/, '')}`;
+
+  if (!imageUrls.has(full)) {
+    const ext = full.split('.').pop().toLowerCase();
+    const blob = new Blob([await readBytes(full)], { type: IMAGE_TYPES[ext] ?? 'application/octet-stream' });
+    imageUrls.set(full, URL.createObjectURL(blob));
+  }
+  return imageUrls.get(full);
 }
 
 /**

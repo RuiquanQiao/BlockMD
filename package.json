@@ -34,6 +34,7 @@
     "desktop:debug": "tauri dev --config \"{\\\"app\\\":{\\\"windows\\\":[{\\\"additionalBrowserArgs\\\":\\\"--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --remote-debugging-port=9222\\\"}]}}\"",
     "desktop:build": "tauri build",
     "check:handle": "node scripts/check-handle.mjs",
+    "parity": "node scripts/parity.mjs",
     "check:assoc": "powershell -ExecutionPolicy Bypass -File scripts/check-assoc.ps1 .md",
     "check:uninstall": "powershell -ExecutionPolicy Bypass -File scripts/check-uninstall.ps1",
     "corpus": "node scripts/fetch-corpus.mjs",
