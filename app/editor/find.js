@@ -10,6 +10,7 @@
 import { $prose } from '@milkdown/kit/utils';
 import { Plugin, PluginKey } from '@milkdown/prose/state';
 import { Decoration, DecorationSet } from '@milkdown/prose/view';
+import { isImeKey } from './ime.js';
 
 const key = new PluginKey('bmdFind');
 
@@ -59,11 +60,13 @@ class FindBar {
 
     this.input.addEventListener('input', () => this.search(0));
     const keys = (e) => {
+      if (isImeKey(e)) return;
       if (e.key === 'Enter' || e.key === 'F3') { e.preventDefault(); this.step(e.shiftKey ? -1 : 1); }
       if (e.key === 'Escape') { e.preventDefault(); this.close(); }
     };
     this.input.addEventListener('keydown', keys);
     this.replaceInput.addEventListener('keydown', (e) => {
+      if (isImeKey(e)) return;
       if (e.key === 'Enter') { e.preventDefault(); this.replace(e.ctrlKey || e.metaKey ? 'all' : 'one'); return; }
       keys(e);
     });

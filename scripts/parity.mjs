@@ -22,6 +22,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, execSync } from 'node:child_process';
 import { FIXTURE } from '../parity/fixture.js';
+import { feelChecks } from './parity-feel.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const WORK = join(ROOT, '.cache', 'parity');
@@ -30,6 +31,8 @@ const PORT = process.env.BMD_CDP_PORT ?? '9222';
 const args = process.argv.slice(2);
 const only = args.find((a) => a.startsWith('--only='))?.slice(7).split(',');
 const keep = args.includes('--keep');
+// Accept the current screenshots as the approved look (after looking at them).
+const approveVisuals = args.includes('--approve-visuals');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const J = JSON.stringify;
@@ -86,15 +89,24 @@ if (!(await pageTarget())) {
   // Port 5174 sits in a Windows-reserved range on some machines and an installed
   // BlockMD would share the WebView2 profile (ignoring the debugging port), so the
   // debug build gets its own port and its own profile under .cache/.
-  console.log('Starting the debug app…');
-  const config = { build: { devUrl: 'http://localhost:1437', beforeDevCommand: 'npx vite --port 1437 --strictPort' } };
+  //
+  // The page is a production bundle (`vite build --mode parity`, app/test-hooks.js),
+  // not the dev server: that's what ships, so speed budgets mean something and the
+  // minified code is what gets checked. (An app this script attaches to instead — one
+  // left running with --keep — shows whatever it was built from; restart it after edits.)
+  console.log('Building the parity bundle and starting the app…');
+  const out = '../.cache/parity-dist';
+  const config = { build: { devUrl: 'http://localhost:1437', beforeDevCommand:
+    `npx vite build --mode parity --outDir ${out} --emptyOutDir && node scripts/check-dist.mjs .cache/parity-dist --expect-hooks && npx vite preview --mode parity --outDir ${out} --port 1437 --strictPort` } };
   child = spawn(process.execPath, [join(ROOT, 'node_modules/@tauri-apps/cli/tauri.js'), 'dev', '--config', J(config)], {
     cwd: ROOT,
     stdio: 'ignore',
     env: {
       ...process.env,
       WEBVIEW2_USER_DATA_FOLDER: join(ROOT, '.cache', 'wv2'),
-      WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${PORT}`,
+      // Greyscale text: ClearType's coloured edges vary from one launch to the next,
+      // which made the screenshot comparison (visual-regression) fail at random.
+      WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${PORT} --disable-lcd-text`,
       // No native dialogs from the first page load on (app/platform.js `stub`).
       VITE_BMD_NO_DIALOGS: '1',
     },
@@ -187,7 +199,7 @@ const PAGE_HELPERS = `window.__parity = {
 /* ------------------------------------------------------------- harness */
 
 const MODS = { Alt: 1, Ctrl: 2, Meta: 4, Shift: 8 };
-const NAMED = { Enter: 13, Tab: 9, Escape: 27, Backspace: 8, End: 35, Home: 36, F3: 114, F11: 122, ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39, Delete: 46 };
+const NAMED = { Enter: 13, Tab: 9, Escape: 27, Backspace: 8, End: 35, Home: 36, F3: 114, F10: 121, F11: 122, Alt: 18, ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39, Delete: 46 };
 
 function keyInfo(k, shift) {
   if (NAMED[k]) return { key: k, code: k, windowsVirtualKeyCode: NAMED[k] };
@@ -206,6 +218,10 @@ const t = {
   ev,
   /** Open `md` as a fresh document on disk (so relative images resolve). */
   async open(md = FIXTURE) {
+    // Off the file first: rewriting the open document's file is, to the app, another
+    // program changing it — its disk watcher rightly reacts (reload, or "changed outside
+    // BlockMD"), racing with the open below.
+    await ev('__bmd.blank()');
     writeFileSync(DOC, md);
     await ev(`__bmd.openPath(${J(DOC)})`);
     await ev(PAGE_HELPERS);
@@ -276,6 +292,7 @@ const t = {
   asked: () => ev('window.__asked ?? []'),
   /** Click File ▸ Save As… (and a third level: File ▸ Open Recent ▸ path). */
   async menu(section, label, deep) {
+    await ev(PAGE_HELPERS); // a check may start here, before any t.open()
     const centre = (sel, text) => ev(`(() => { const e = [...document.querySelectorAll(${J(sel)})].find((x) => ${text ? `x.textContent.includes(${J(text)})` : 'true'} && __parity.visible(x)); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
     const b = await centre('#btn-menu');
     await t.click(b.x, b.y);
@@ -976,13 +993,17 @@ async function dragBlock(from, to) {
   return { moved: await t.save(), indicator };
 }
 
+// How it feels (parity/feel.json): scripts/parity-feel.mjs.
+Object.assign(checks, feelChecks({ t, ev, send, expect, file, grip, FIXTURE, ROOT, WORK, approve: approveVisuals }));
+
 /* ------------------------------------------------------------- run */
 
-// Two lists, one runner: what Notion does inside a page, and what any desktop editor
+// Three lists, one runner: what Notion does inside a page, and what any desktop editor
 // is expected to do (the gaps Notion parity doesn't cover — see editor.json).
 const LISTS = [
   ['Notion parity', 'parity/notion.json'],
   ['Editor baseline', 'parity/editor.json'],
+  ['Feel', 'parity/feel.json'],
 ];
 const results = [];
 for (const [list, file] of LISTS) {
@@ -998,7 +1019,7 @@ for (const [list, file] of LISTS) {
     if (prior) { results.push({ ...row, result: prior.result, detail: prior.detail }); continue; }
     let result = 'pass', detail = '';
     try {
-      await Promise.race([run(), sleep(45000).then(() => { throw new Error('timed out'); })]);
+      await Promise.race([run(), sleep(run.timeout ?? 45000).then(() => { throw new Error('timed out'); })]);
     } catch (err) {
       result = 'fail';
       detail = String(err.message ?? err).split('\n').slice(0, 3).join(' ');
@@ -1055,8 +1076,10 @@ if (!only) {
 }
 console.log('Report: .cache/parity/report.md');
 
-// Leave the debug profile as a person would find it: dialogs on, nothing pending.
-await ev(`(() => { for (const k of ${J([...DEV_KEYS, 'bmd.devNoDialogs'])}) localStorage.removeItem(k); })()`).catch(() => {});
+// Leave the debug profile as a person would find it: dialogs on, nothing pending. With
+// --keep the app stays up for more automated probing, so dialogs stay off: a native
+// dialog nobody can click would freeze the next probe.
+await ev(`(() => { for (const k of ${J([...DEV_KEYS, ...(keep ? [] : ['bmd.devNoDialogs'])])}) localStorage.removeItem(k); })()`).catch(() => {});
 ws.close();
 stopApp();
 process.exit(allPass ? 0 : 1);

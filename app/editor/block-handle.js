@@ -18,6 +18,7 @@ import { createBlockMenu } from './block-menu.js';
 import { guardHandlePosition } from './handle-guard.js';
 import { OPEN_BLOCK_MENU } from './keymap.js';
 import { EXTEND_SELECTION } from './select.js';
+import { TEST_HOOKS } from '../test-hooks.js';
 
 /** Gap between the handle's right edge and the left edge of the text column. */
 const HANDLE_GAP = 8;
@@ -153,7 +154,7 @@ export function createBlockHandle(ctx, view) {
       : undefined,
   });
 
-  if (import.meta.env?.DEV) {
+  if (TEST_HOOKS) {
     window.__bmdHandle = { content, provider, ctx };
   }
 

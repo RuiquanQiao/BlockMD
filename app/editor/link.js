@@ -4,6 +4,7 @@
  */
 
 import { TextSelection } from '@milkdown/prose/state';
+import { isImeKey } from './ime.js';
 
 let open = null;
 
@@ -54,6 +55,7 @@ export function openLinkEditor(view) {
   }
 
   input.addEventListener('keydown', (e) => {
+    if (isImeKey(e)) return;
     if (e.key === 'Enter') { e.preventDefault(); close(true); }
     if (e.key === 'Escape') { e.preventDefault(); close(false); }
   });

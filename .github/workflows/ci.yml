@@ -41,3 +41,8 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+      # The parity checks drive the app through test hooks (app/test-hooks.js); a
+      # release bundle must not contain them.
+      - name: Release bundle has no test hooks
+        run: npm run build && node scripts/check-dist.mjs

@@ -7,9 +7,8 @@
  */
 
 import { Editor, rootCtx, defaultValueCtx, editorViewCtx } from '@milkdown/kit/core';
-import { commonmark } from '@milkdown/kit/preset/commonmark';
+import { commonmark, syncHeadingIdPlugin } from '@milkdown/kit/preset/commonmark';
 import { gfm } from '@milkdown/kit/preset/gfm';
-import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
 import { history } from '@milkdown/kit/plugin/history';
 import { block } from '@milkdown/kit/plugin/block';
 import { clipboard } from '@milkdown/kit/plugin/clipboard';
@@ -33,16 +32,22 @@ import { mediaPlugin } from './media.js';
 import { emojiPlugin } from './emoji.js';
 import { blockSelectPlugin } from './select.js';
 import { clipboardExtrasPlugin } from './clipboard-extras.js';
+import { changeListener } from './change-listener.js';
+import { reuseParse } from './reuse-parse.js';
 
 /**
  * @param {object} opts
  * @param {HTMLElement} opts.root Mount point
  * @param {string} opts.value Initial Markdown
  * @param {(ctx:any)=>void} [opts.onChange] Called after each document-changing transaction
+ * @param {object} [opts.tree] The mdast MdDoc parsed from `value`, reused instead of a
+ *   second parse (reuse-parse.js)
  * @returns {Promise<import('@milkdown/kit/core').Editor>}
  */
-export async function createEditor({ root, value, onChange }) {
-  const editor = await buildEditor({ root, value, onChange });
+export async function createEditor({ root, value, onChange, tree }) {
+  const seed = tree ? { text: value, tree, used: false } : undefined;
+  const editor = await buildEditor({ root, value, onChange, seed });
+  editor.parseReused = Boolean(seed?.used);
 
   const kick = () => {
     editor.action((ctx) => {
@@ -76,7 +81,7 @@ export async function createEditor({ root, value, onChange }) {
   return editor;
 }
 
-function buildEditor({ root, value, onChange }) {
+function buildEditor({ root, value, onChange, seed }) {
   return Editor.make()
     .config((ctx) => {
       ctx.set(rootCtx, root);
@@ -89,16 +94,14 @@ function buildEditor({ root, value, onChange }) {
 
       ctx.set(slash.key, createSlashMenu(ctx));
 
-      if (onChange) {
-        ctx.get(listenerCtx).updated((_ctx, doc, prevDoc) => {
-          if (doc === prevDoc) return;
-          onChange(_ctx);
-        });
-      }
     })
-    .use(commonmark)
+    // Without the heading-id plugin: it gives every heading an `id` (nothing here uses
+    // one; they never reach the file) with one step per heading on open, then rescans
+    // the whole document on every keystroke (parity/feel.json: large-file).
+    .use(commonmark.filter((p) => p !== syncHeadingIdPlugin))
     .use(gfm)
-    .use(listener)
+    .use(changeListener(onChange))
+    .use(reuseParse(seed))
     .use(history)
     .use(alignmentPlugins)
     .use(calloutPlugin)

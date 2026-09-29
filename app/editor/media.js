@@ -12,7 +12,8 @@
 
 import { $prose } from '@milkdown/kit/utils';
 import { Plugin, PluginKey } from '@milkdown/prose/state';
-import { Decoration, DecorationSet } from '@milkdown/prose/view';
+import { Decoration } from '@milkdown/prose/view';
+import { blockwise } from './blockwise.js';
 import { imageUrl } from '../platform.js';
 import { currentDocumentPath } from './image.js';
 
@@ -66,19 +67,20 @@ function render(kind, href, label) {
   return box;
 }
 
-function build(doc) {
-  const decos = [];
-  doc.forEach((node, pos) => {
-    const href = soleLink(node);
-    const kind = href && mediaKind(href);
-    if (!kind) return;
-    const end = pos + node.nodeSize;
-    decos.push(Decoration.widget(end, () => render(kind, href, node.textContent), {
-      side: -1, key: `${kind}:${href}:${node.textContent}`, ignoreSelection: true,
-    }));
-  });
-  return DecorationSet.create(doc, decos);
+/** A preview after a top-level paragraph that is nothing but one media link. */
+function decorateBlock(node, pos) {
+  const href = soleLink(node);
+  const kind = href && mediaKind(href);
+  if (!kind) return [];
+  const end = pos + node.nodeSize;
+  return [Decoration.widget(end, () => render(kind, href, node.textContent), {
+    side: -1, key: `${kind}:${href}:${node.textContent}`, ignoreSelection: true,
+  })];
 }
+
+const decorations = blockwise(decorateBlock);
+/** Every preview in `doc` (tests compare the incremental set to this). */
+export const buildPreviews = decorations.all;
 
 const key = new PluginKey('bmdMedia');
 
@@ -86,10 +88,7 @@ export const mediaPlugin = $prose(
   () =>
     new Plugin({
       key,
-      state: {
-        init: (_c, state) => build(state.doc),
-        apply: (tr, prev) => (tr.docChanged ? build(tr.doc) : prev.map(tr.mapping, tr.doc)),
-      },
+      state: { init: decorations.init, apply: decorations.apply },
       props: { decorations: (state) => key.getState(state) },
     }),
 );

@@ -9,7 +9,8 @@
 
 import { $prose } from '@milkdown/kit/utils';
 import { Plugin, PluginKey } from '@milkdown/prose/state';
-import { Decoration, DecorationSet } from '@milkdown/prose/view';
+import { Decoration } from '@milkdown/prose/view';
+import { blockwise } from './blockwise.js';
 import { common, createLowlight } from 'lowlight';
 
 const lowlight = createLowlight(common);
@@ -38,15 +39,21 @@ function tokens(node) {
   return out;
 }
 
-function build(doc) {
+/** Highlighting for the code blocks in one top-level block (they can nest in lists). */
+function decorateBlock(block, blockPos) {
   const decos = [];
-  doc.descendants((node, pos) => {
+  const visit = (node, pos) => {
     if (node.type.name !== 'code_block') return true;
     for (const t of tokens(node)) decos.push(Decoration.inline(pos + 1 + t.from, pos + 1 + t.to, { class: t.cls }));
     return false;
-  });
-  return DecorationSet.create(doc, decos);
+  };
+  if (visit(block, blockPos)) block.descendants((node, pos) => visit(node, blockPos + 1 + pos));
+  return decos;
 }
+
+const decorations = blockwise(decorateBlock);
+/** Every highlight decoration in `doc` (tests compare the incremental set to this). */
+export const buildHighlights = decorations.all;
 
 const key = new PluginKey('bmdHighlight');
 
@@ -54,10 +61,7 @@ export const highlightPlugin = $prose(
   () =>
     new Plugin({
       key,
-      state: {
-        init: (_config, state) => build(state.doc),
-        apply: (tr, prev) => (tr.docChanged ? build(tr.doc) : prev),
-      },
+      state: { init: decorations.init, apply: decorations.apply },
       props: { decorations: (state) => key.getState(state) },
     }),
 );

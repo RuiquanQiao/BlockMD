@@ -108,6 +108,11 @@ jobs:
           # Upload into the one draft made above (notes: .github/release-notes.md).
           releaseId: ${{ needs.draft.outputs.id }}
 
+      # dist/ is now exactly what went into the installers: no test hooks in it
+      # (app/test-hooks.js). A failure here fails the release gate.
+      - name: Shipped bundle has no test hooks
+        run: node scripts/check-dist.mjs
+
   # Runs once, after every platform has uploaded its signed bundle. Refuses to write a
   # manifest with a platform missing, so a half-built release can't strand anyone.
   manifest:

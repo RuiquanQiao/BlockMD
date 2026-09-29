@@ -22,16 +22,22 @@
  *   new content that has to be serialized
  */
 export function reconcileByIdentity(oldNodes, newNodes) {
-  const used = new Set();
+  // Each new node takes the earliest old occurrence of the same reference not yet
+  // taken (one object can sit in several places, e.g. after Duplicate). A queue per
+  // reference gives exactly that in one pass; scanning the old list for every new node
+  // was quadratic — 10,000 blocks cost about a second on open and on every keystroke.
+  const at = new Map();
+  oldNodes.forEach((node, o) => {
+    const q = at.get(node);
+    if (q) q.push(o); else at.set(node, [o]);
+  });
+  const next = new Map(); // reference → how many of its queue are taken
   return newNodes.map((node) => {
-    for (let o = 0; o < oldNodes.length; o++) {
-      if (used.has(o)) continue;
-      if (oldNodes[o] === node) {
-        used.add(o);
-        return { fromOld: o };
-      }
-    }
-    return { fromOld: null };
+    const q = at.get(node);
+    const k = next.get(node) ?? 0;
+    if (!q || k >= q.length) return { fromOld: null };
+    next.set(node, k + 1);
+    return { fromOld: q[k] };
   });
 }
 

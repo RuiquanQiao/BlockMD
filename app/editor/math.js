@@ -14,6 +14,7 @@ import 'katex/dist/katex.min.css';
 import { $prose, $inputRule } from '@milkdown/kit/utils';
 import { Plugin, PluginKey, NodeSelection, TextSelection } from '@milkdown/prose/state';
 import { InputRule } from '@milkdown/prose/inputrules';
+import { isImeKey } from './ime.js';
 
 function render(el, value, displayMode) {
   if (!value.trim()) {
@@ -75,6 +76,7 @@ export function openMathEditor(view, pos) {
   }
   input.addEventListener('input', update);
   input.addEventListener('keydown', (e) => {
+    if (isImeKey(e)) return;
     if (e.key === 'Escape') { e.preventDefault(); close(false); }
     if (e.key === 'Enter' && (!block || e.ctrlKey || e.metaKey)) { e.preventDefault(); close(true); }
   });

@@ -23,6 +23,7 @@ import {
   duplicateBlock,
   turnInto,
 } from './block-types.js';
+import { isImeKey } from './ime.js';
 
 const CHECK = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const CHEVRON = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5l4.5 4.5L6 12.5" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -163,6 +164,7 @@ export function createBlockMenu({ getView }) {
   }
 
   function onKey(e) {
+    if (isImeKey(e)) return;
     const inSub = subCursor !== -1;
     const list = inSub ? subRows : rows;
     let handled = true;

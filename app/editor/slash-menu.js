@@ -16,6 +16,8 @@ import { BLOCK_TYPES, blockAtSelection, insertDivider, turnInto } from './block-
 import { insertMathBlock, insertInlineMath } from './math.js';
 import { insertToggle, insertColumns } from './containers.js';
 import { openEmojiPicker } from './emoji.js';
+import { isImeKey } from './ime.js';
+import { size, shift } from '@floating-ui/dom';
 
 export const slash = slashFactory('bmdSlash');
 
@@ -121,6 +123,12 @@ export function createSlashMenu(ctx) {
   const provider = new SlashProvider({
     content: dom,
     trigger: '/',
+    // After the provider's own flip: in a short window neither side has room for the
+    // whole menu, so it gets the height there is (it scrolls) and stays on screen.
+    middleware: [
+      size({ padding: 8, apply({ availableHeight, elements }) { elements.floating.style.maxHeight = `${Math.max(120, Math.min(330, availableHeight))}px`; } }),
+      shift({ padding: 8 }),
+    ],
     shouldShow(view) {
       const { selection } = view.state;
       if (!(selection instanceof TextSelection) || !selection.empty) return false;
@@ -160,6 +168,7 @@ export function createSlashMenu(ctx) {
       handleKeyDown: (_view, event) => {
         // SlashProvider only toggles data-show; never swallow keys while hidden.
         if (dom.dataset.show !== 'true') return false;
+        if (isImeKey(event)) return false; // confirming a candidate, not choosing an item
         switch (event.key) {
           case 'ArrowDown':
             event.preventDefault();

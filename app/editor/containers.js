@@ -20,6 +20,7 @@ import { Plugin, PluginKey, EditorState, NodeSelection } from '@milkdown/prose/s
 import { EditorView } from '@milkdown/prose/view';
 import { DocumentSession } from '../session.js';
 import { blockAtSelection } from './block-types.js';
+import { isImeKey } from './ime.js';
 
 /**
  * A nested editor over one part's Markdown.
@@ -73,7 +74,7 @@ class ToggleView {
     this.arrow.addEventListener('click', () => this.setOpen(this.dom.dataset.open !== 'true'));
     this.summary.addEventListener('input', () => this.commit({ summary: this.summary.textContent }));
     this.summary.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
+      if (e.key === 'Enter' && !isImeKey(e)) {
         e.preventDefault();
         this.setOpen(true);
         this.body.view.focus();

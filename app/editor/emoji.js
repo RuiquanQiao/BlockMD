@@ -8,6 +8,7 @@
 import { $prose } from '@milkdown/kit/utils';
 import { Plugin, PluginKey } from '@milkdown/prose/state';
 import { EMOJI } from './emoji-data.js';
+import { isImeKey } from './ime.js';
 
 const key = new PluginKey('bmdEmoji');
 /** `:word` right before the cursor, at the start of the text or after a space. */
@@ -122,7 +123,7 @@ export const emojiPlugin = $prose(
       props: {
         handleKeyDown(view, e) {
           const p = current;
-          if (!p?.isOpen) return false;
+          if (!p?.isOpen || isImeKey(e)) return false;
           if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { p.move(e.key === 'ArrowDown' ? 8 : 1); return true; }
           if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { p.move(e.key === 'ArrowUp' ? -8 : -1); return true; }
           if (e.key === 'Enter' || e.key === 'Tab') { p.pick(p.cursor); return true; }

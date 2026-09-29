@@ -17,7 +17,7 @@
   --bg: #fff;
   --bg-sunken: #f7f6f3;          /* code blocks, front matter */
   --ink: #37352f;
-  --ink-2: rgba(55, 53, 47, 0.65);
+  --ink-2: rgba(55, 53, 47, 0.68); /* Notion's 0.65 is 4.19:1 on white; 0.68 reaches WCAG AA 4.5:1 */
   --ink-3: rgba(55, 53, 47, 0.45);
   --rule: rgba(55, 53, 47, 0.09);
   --rule-strong: rgba(55, 53, 47, 0.16);
@@ -134,12 +134,13 @@ body {
 .btn-primary {
   margin-left: 6px;
   padding: 6px 12px;
-  background: var(--accent);
+  /* A shade under Notion's #2383e2, whose white label is 3.88:1 — this is 4.64:1 (AA). */
+  background: #1f76cc;
   color: #fff;
   font-weight: 500;
 }
-.btn-primary:hover { background: #1a7ad4; }
-.btn-primary:active { background: #1a7ad4; }
+.btn-primary:hover { background: #1a6ab8; }
+.btn-primary:active { background: #1a6ab8; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* ——— Workspace ——— */
@@ -731,6 +732,7 @@ body {
 .bmd-sample-serif { font-family: var(--font-serif); }
 .bmd-sample-mono { font-family: var(--font-mono); }
 .bmd-style-toggle { display: flex; justify-content: space-between; align-items: center; width: 100%; text-align: left; }
+.bmd-style-toggle:hover { background: var(--hover); }
 .bmd-switch { position: relative; width: 28px; height: 16px; border-radius: 8px; background: var(--rule-strong); transition: background 0.15s; flex: none; }
 .bmd-switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; transition: transform 0.15s; }
 .bmd-switch.is-on { background: var(--accent); }
@@ -763,7 +765,9 @@ body {
 .bmd-app-arrow { color: var(--ink-3); font-size: 16px; line-height: 1; }
 .bmd-app-check { width: 14px; color: var(--accent); flex: none; }
 .bmd-app-sep { height: 1px; margin: 4px 6px; background: var(--rule); }
-.bmd-app-item.is-open { background: var(--hover); }
+.bmd-app-item.is-open,
+.bmd-app-item:not(:disabled):hover,
+.bmd-app-item:focus-visible { background: var(--hover); outline: none; }
 
 /* ——— Replace row in the find bar (editor/find.js) ——— */
 .bmd-find { flex-direction: column; align-items: stretch; gap: 4px; }

@@ -25,6 +25,7 @@ import { setUpPageStyle, pageStyle, setPageStyle } from './page-style.js';
 import { setUpAppMenu } from './app-menu.js';
 import { openFind, openReplace } from './editor/find.js';
 import { copyAsMarkdown } from './editor/clipboard-extras.js';
+import { TEST_HOOKS } from './test-hooks.js';
 
 const UNTITLED = 'Untitled.md';
 const MARKDOWN_FILE = /\.(md|markdown|mdx|txt)$/i;
@@ -150,7 +151,8 @@ function refresh() {
         : `Modified · ${s.fresh} new block(s) to serialize, ${s.reused} kept verbatim`;
   el.text.title = '';
 
-  el.blocks.textContent = `${s.reused + s.fresh} blocks`;
+  const blocks = s.reused + s.fresh;
+  el.blocks.textContent = `${blocks} ${blocks === 1 ? 'block' : 'blocks'}`;
   el.hidden.textContent = s.hidden > 0 ? `${s.hidden} hidden block(s) held by splice layer` : '';
 
   if (showSource) {
@@ -210,6 +212,7 @@ async function load(source, name, path = null, { restored = false } = {}) {
   editor = await createEditor({
     root: el.editor,
     value: session.doc.body,
+    tree: session.doc.tree, // parsed once, for both sides (editor/reuse-parse.js)
     onChange: () => { refresh(); scheduleDraft(); },
   });
 
@@ -222,7 +225,7 @@ async function load(source, name, path = null, { restored = false } = {}) {
   // the app from outside (scripts/cdp.mjs, scripts/parity.mjs). Synthetic keystrokes
   // sent with Windows' SendInput never reach WebView2, so desktop checks go through
   // the debugging protocol instead.
-  if (import.meta.env?.DEV) {
+  if (TEST_HOOKS) {
     window.__bmd = {
       get session() { return session; },
       get editor() { return editor; },
@@ -233,6 +236,8 @@ async function load(source, name, path = null, { restored = false } = {}) {
       open: openFile,
       /** Open a file by path without a dialog. */
       async openPath(p) { await load(await platform.readFile(p), platform.basename(p), p); },
+      /** A new, empty, unsaved document — nothing on disk for the watcher to look at. */
+      blank: () => load('', UNTITLED, null),
       /** The drop handler, minus the OS drag (which the debugging protocol can't make). */
       drop: handleDrop,
       checkDisk: watchDisk,
@@ -338,18 +343,22 @@ let checkingDisk = false;
 async function watchDisk() {
   if (!currentPath || checkingDisk) return;
   checkingDisk = true;
+  // The file this check is about. Another document can be opened while it waits; the
+  // answer about the old file must then not be applied to the new one (it once recorded
+  // the old file's time against the new document, and the next check "saw" a change).
+  const path = currentPath;
   try {
-    const now = await platform.fileModified(currentPath);
-    if (now == null || diskTime == null || now === diskTime) return;
+    const now = await platform.fileModified(path);
+    if (path !== currentPath || now == null || diskTime == null || now === diskTime) return;
     diskTime = now;
     if (isDirty()) {
       const reload = await platform.confirmDiscard(
         `${session.name} was changed by another program. Reload it and lose your unsaved changes here?`,
       );
-      if (!reload) return;
+      if (!reload || path !== currentPath) return;
       clearDraft();
     }
-    await load(await platform.readFile(currentPath), session.name, currentPath);
+    await load(await platform.readFile(path), session.name, path);
     flash('Reloaded — the file was changed outside BlockMD', 'ok');
   } catch (err) {
     console.warn('[BlockMD] disk check failed:', err);

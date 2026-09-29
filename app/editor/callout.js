@@ -19,7 +19,8 @@
 
 import { $prose } from '@milkdown/kit/utils';
 import { Plugin, PluginKey } from '@milkdown/prose/state';
-import { Decoration, DecorationSet } from '@milkdown/prose/view';
+import { Decoration } from '@milkdown/prose/view';
+import { blockwise } from './blockwise.js';
 
 /** `[!TYPE]` plus Obsidian's optional fold sign, at the very start of the first line. */
 export const CALLOUT_MARKER = /^\[!([A-Za-z][\w-]*)\]([-+]?)/;
@@ -53,10 +54,18 @@ export function restoreCalloutMarkers(md) {
 
 const key = new PluginKey('bmdCallout');
 
-/** @param {import('@milkdown/prose/model').Node} doc */
-function buildDecorations(doc) {
+/**
+ * Callout decorations in one top-level block (a callout can also sit inside a list).
+ * @param {import('@milkdown/prose/model').Node} block
+ * @param {number} blockPos
+ */
+function decorateBlock(block, blockPos) {
   const decos = [];
-  doc.descendants((node, pos) => {
+  visit(block, blockPos);
+  block.descendants((node, pos) => visit(node, blockPos + 1 + pos));
+  return decos;
+
+  function visit(node, pos) {
     const info = calloutInfo(node);
     if (!info) return true;
 
@@ -90,18 +99,18 @@ function buildDecorations(doc) {
       offset += child.nodeSize;
     }
     return true;
-  });
-  return DecorationSet.create(doc, decos);
+  }
 }
+
+const decorations = blockwise(decorateBlock);
+/** Every callout decoration in `doc` (tests compare the incremental set to this). */
+export const buildDecorations = decorations.all;
 
 export const calloutPlugin = $prose(
   () =>
     new Plugin({
       key,
-      state: {
-        init: (_config, state) => buildDecorations(state.doc),
-        apply: (tr, prev) => (tr.docChanged ? buildDecorations(tr.doc) : prev),
-      },
+      state: { init: decorations.init, apply: decorations.apply },
       props: {
         decorations: (state) => key.getState(state),
       },

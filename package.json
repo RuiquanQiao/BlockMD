@@ -36,6 +36,7 @@
     "check:handle": "node scripts/check-handle.mjs",
     "parity": "node scripts/parity.mjs",
     "release:gate": "node scripts/release-gate.mjs",
+    "check:dist": "node scripts/check-dist.mjs",
     "check:assoc": "powershell -ExecutionPolicy Bypass -File scripts/check-assoc.ps1 .md",
     "check:uninstall": "powershell -ExecutionPolicy Bypass -File scripts/check-uninstall.ps1",
     "corpus": "node scripts/fetch-corpus.mjs",

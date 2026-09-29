@@ -20,6 +20,8 @@
  *      silent corruption on save.
  */
 
+import { TEST_HOOKS } from './test-hooks.js';
+
 const BOM = '﻿';
 
 export const isDesktop =
@@ -145,10 +147,10 @@ export async function writeFile(path, text) {
 /**
  * Dev-only stand-ins for native dialogs and window actions. scripts/parity.mjs can't
  * click a system dialog, so it sets `window.__bmdStub.<name>` to answer for it.
- * Production builds never look (import.meta.env.DEV is false there).
+ * Release builds never look (see test-hooks.js).
  */
 function stub(name) {
-  if (!import.meta.env?.DEV) return undefined;
+  if (!TEST_HOOKS) return undefined;
   if (window.__bmdStub?.[name]) return window.__bmdStub[name];
   // Questions asked during startup (restore a draft?) come before any script could
   // install a stub, so the answer can also be left in local storage.

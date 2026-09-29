@@ -11,6 +11,7 @@
  */
 
 import * as platform from './platform.js';
+import { TEST_HOOKS } from './test-hooks.js';
 
 /** Check again this often while the app stays open. */
 const RECHECK_MS = 6 * 60 * 60 * 1000;
@@ -85,9 +86,9 @@ export function startUpdateChecks({ isDirty }) {
   });
 
   async function check() {
-    // Never automatically in a dev build: it would offer to install a release over
-    // itself. Help ▸ Check for Updates still runs the real check there.
-    if (busy || import.meta.env?.DEV) return;
+    // Never automatically in a dev or parity build: it would offer to install a release
+    // over itself. Help ▸ Check for Updates still runs the real check there.
+    if (busy || TEST_HOOKS) return;
     try {
       const update = await platform.checkForUpdate();
       if (update && update.version !== offered?.version) offer(update);

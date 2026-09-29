@@ -7,6 +7,7 @@
 
 import { $prose } from '@milkdown/kit/utils';
 import { Plugin, PluginKey } from '@milkdown/prose/state';
+import { isImeKey } from './ime.js';
 
 export const LANGUAGES = [
   ['', 'Plain text'], ['bash', 'Bash'], ['c', 'C'], ['cpp', 'C++'], ['csharp', 'C#'], ['css', 'CSS'],
@@ -76,12 +77,22 @@ class CodeBlockView {
       items.forEach(([id, label], i) => {
         const b = document.createElement('button');
         b.type = 'button';
-        b.className = 'bmd-menu-item' + (i === cursor ? ' is-active' : '');
+        b.className = 'bmd-menu-item';
+        b.setAttribute('role', 'option');
+        b.tabIndex = -1;
         b.textContent = label;
         b.addEventListener('mousedown', (e) => e.preventDefault());
         b.addEventListener('click', () => choose(id));
+        // The pointer and the arrow keys move one highlight (as in the slash menu).
+        b.addEventListener('pointermove', () => { if (cursor !== i) { cursor = i; mark(); } });
         list.append(b);
       });
+      mark();
+    };
+    /** Move the highlight without rebuilding the list. */
+    const mark = (scroll = false) => {
+      [...list.children].forEach((b, i) => { b.classList.toggle('is-active', i === cursor); b.setAttribute('aria-selected', String(i === cursor)); });
+      if (scroll) list.children[cursor]?.scrollIntoView({ block: 'nearest' });
     };
     const close = () => { menu.remove(); document.removeEventListener('mousedown', outside, true); };
     const choose = (id) => {
@@ -96,8 +107,9 @@ class CodeBlockView {
     const outside = (e) => { if (!menu.contains(e.target)) close(); };
     input.addEventListener('input', () => { cursor = 0; draw(); });
     input.addEventListener('keydown', (e) => {
-      if (e.key === 'ArrowDown') { cursor = Math.min(items.length - 1, cursor + 1); draw(); e.preventDefault(); }
-      if (e.key === 'ArrowUp') { cursor = Math.max(0, cursor - 1); draw(); e.preventDefault(); }
+      if (isImeKey(e)) return; // the key belongs to the input method (see ime.js)
+      if (e.key === 'ArrowDown') { cursor = Math.min(items.length - 1, cursor + 1); mark(true); e.preventDefault(); }
+      if (e.key === 'ArrowUp') { cursor = Math.max(0, cursor - 1); mark(true); e.preventDefault(); }
       if (e.key === 'Enter' && items[cursor]) { e.preventDefault(); choose(items[cursor][0]); }
       if (e.key === 'Escape') { e.preventDefault(); close(); this.view.focus(); }
     });
