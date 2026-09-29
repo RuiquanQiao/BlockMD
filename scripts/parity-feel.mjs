@@ -544,6 +544,16 @@ export function feelChecks({ t, ev, send, expect, file, grip, FIXTURE, ROOT, WOR
       expect(!bad.length, bad.join('; '));
     },
 
+    async 'ime-colon'() {
+      // The owner's rule: the full-width ： (Chinese mode) never opens the emoji picker —
+      // the keyboard is still in Chinese mode after it — while the ASCII : does.
+      await t.newLine(); await ime('maohao', '：'); await t.type('smi'); await sleep(300);
+      expect(!(await t.vis('.bmd-emoji')), 'the full-width ： opened the emoji picker');
+      await t.newLine(); await t.type(':smi'); await sleep(300);
+      expect(await t.vis('.bmd-emoji'), 'the ASCII : no longer opens the emoji picker');
+      await t.key('Escape');
+    },
+
     /* ——— Visual regression ——— */
     async 'visual-regression'() {
       const dir = join(ROOT, 'parity', 'baselines');
@@ -659,7 +669,7 @@ export function feelChecks({ t, ev, send, expect, file, grip, FIXTURE, ROOT, WOR
       await send('Emulation.setEmulatedMedia', { features: [] });
       // One line per distinct problem, not one per occurrence.
       const uniq = (list) => [...new Set(list.map((b) => b.replace(/"[^"]*" /, '')))];
-      if (hints.length) console.log(`    Notion-faint text below AA (feel.json: contrast-hints, your decision): ${uniq(hints).length} kinds`);
+      if (hints.length) console.log(`    Notion-faint text below AA (feel.json: contrast-hints, kept by the owner's decision): ${uniq(hints).length} kinds`);
       expect(!uniq(bad).length, `${uniq(bad).length} low-contrast kinds of text: ${uniq(bad).slice(0, 12).join('; ')}`);
     },
 
