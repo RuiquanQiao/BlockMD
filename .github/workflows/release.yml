@@ -30,11 +30,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.ref_name }}
         run: |
-          # Reuse the draft on a re-run; otherwise create it.
+          # Reuse the draft on a re-run; otherwise create it. The id comes from the
+          # create call itself: listing right after creating can lag (v0.1.6's first
+          # run made the draft, then couldn't find it).
           id=$(gh api "repos/${{ github.repository }}/releases" --jq ".[] | select(.tag_name == \"$TAG\" and .draft) | .id" | head -n 1)
           if [ -z "$id" ]; then
-            gh release create "$TAG" --draft --verify-tag --title "BlockMD $TAG" --notes-file .github/release-notes.md
-            id=$(gh api "repos/${{ github.repository }}/releases" --jq ".[] | select(.tag_name == \"$TAG\" and .draft) | .id" | head -n 1)
+            id=$(gh api --method POST "repos/${{ github.repository }}/releases" \
+              -f tag_name="$TAG" -f name="BlockMD $TAG" -F draft=true \
+              -F body=@.github/release-notes.md --jq .id)
           fi
           test -n "$id"
           echo "id=$id" >> "$GITHUB_OUTPUT"
