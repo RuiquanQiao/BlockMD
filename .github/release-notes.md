@@ -1,6 +1,6 @@
-Download the installer for your platform below. BlockMD 0.1.1, 0.1.2 and 0.1.5 or
+Download the installer for your platform below. BlockMD 0.1.1, 0.1.2 and 0.1.6 or
 later offer new versions by themselves when you open them. **0.1.3 and 0.1.4 can't**
-(a bug fixed in 0.1.5): if you have one of those, install 0.1.5 or later by hand once.
+(a bug fixed in 0.1.6): if you have one of those, install this version by hand once.
 
 **Windows** — two installers are published and they register BlockMD
 identically; pick either. `-setup.exe` (NSIS) is the smaller one and the
