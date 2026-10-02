@@ -41,6 +41,36 @@ export const FEEL = `window.__feel = {
   focusSig(e) { const s = getComputedStyle(e); return [s.outlineStyle, s.outlineWidth, s.outlineColor, s.boxShadow, s.backgroundColor, s.borderTopColor].join('|'); },
   pad(sel) { const e = [...document.querySelectorAll(sel)].find((x) => this.hittable(x) || getComputedStyle(x).visibility === 'visible'); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.left + 3, y: r.top + 3 }; },
   rect(sel) { const e = typeof sel === 'string' ? document.querySelector(sel) : sel; if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height, right: r.right, bottom: r.bottom }; },
+  /**
+   * Where the browser draws the caret, and what would hide it. In an empty block the
+   * DOM range has no box, so ProseMirror's coordinates for the focused view stand in.
+   */
+  caret() {
+    const ed = document.activeElement;
+    if (!ed || !ed.isContentEditable) return { err: 'focus is not in editable text (' + (ed?.tagName ?? 'none') + '.' + (ed?.className ?? '') + ')' };
+    const s = getSelection();
+    if (!s.rangeCount) return { err: 'no selection' };
+    const range = s.getRangeAt(0);
+    if (!range.collapsed) return { err: 'the selection is not a caret' };
+    let r = [...range.getClientRects()].pop() ?? range.getBoundingClientRect();
+    if (!r || r.height < 1) {
+      const view = ed.pmViewDesc?.view ?? (ed === __bmd.view().dom ? __bmd.view() : null);
+      const c = view?.coordsAtPos(view.state.selection.head);
+      if (c) r = { left: c.left, top: c.top, height: c.bottom - c.top };
+    }
+    if (!r || r.height < 1) return { err: 'the caret has no position on screen' };
+    const host = s.anchorNode.nodeType === 1 ? s.anchorNode : s.anchorNode.parentElement;
+    const st = getComputedStyle(host);
+    const box = ed.getBoundingClientRect();
+    const x = r.left, y = r.top + r.height / 2;
+    const top = document.elementFromPoint(Math.min(Math.max(x, box.left + 1), innerWidth - 1), y);
+    return {
+      x, top: r.top, h: r.height, font: parseFloat(st.fontSize), line: parseFloat(st.lineHeight) || parseFloat(st.fontSize) * 1.5,
+      color: st.caretColor, bg: this.background(host), within: x >= box.left - 2 && x <= box.right + 2 && r.top >= box.top - 2 && r.top + r.height <= box.bottom + 2,
+      onScreen: x >= 0 && x <= innerWidth && r.top >= 0 && r.top + r.height <= innerHeight,
+      covered: top && !ed.contains(top) && !top.contains(ed) ? (top.className || top.tagName) + '' : null,
+    };
+  },
   /* WCAG relative luminance and contrast, compositing translucent colours over what's behind. */
   rgba(c) { const m = c.match(/[\\d.]+/g)?.map(Number) ?? [0, 0, 0, 0]; return [m[0], m[1], m[2], m[3] ?? 1]; },
   over(top, under) { const a = top[3]; return [0, 1, 2].map((k) => top[k] * a + under[k] * (1 - a)).concat(1); },
@@ -343,18 +373,25 @@ export function feelChecks({ t, ev, send, expect, file, grip, FIXTURE, ROOT, WOR
     async 'large-file'() {
       const text = bigDoc(10000);
       const p = file('large.md', text);
-      await ev('__bmd.view()?.dom.blur?.(); true');
-      const t0 = performance.now();
-      await ev(`__bmd.openPath(${J(p)})`);
-      await ev('new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)))');
-      const open = Math.round(performance.now() - t0);
-      const t1 = performance.now();
-      const saved = await t.save();
-      const save = Math.round(performance.now() - t1);
-      console.log(`    ${(text.length / 1e6).toFixed(2)} MB: open ${open} ms, save ${save} ms`);
-      expect(saved === text, 'the large file did not save byte-identical');
-      expect(await ev('__bmd.editor.parseReused'), 'the editor parsed the file a second time (editor/reuse-parse.js was not used)');
-      expect(open <= 3000, `opening took ${open} ms (budget 3000 ms)`);
+      // The median of three: one timing swings by a second with whatever else the
+      // computer is doing, which made a fixed budget pass or fail at random.
+      const opens = [], saves = [];
+      for (let i = 0; i < 3; i++) {
+        await ev('__bmd.blank()');
+        const t0 = performance.now();
+        await ev(`__bmd.openPath(${J(p)})`);
+        await ev('new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)))');
+        opens.push(Math.round(performance.now() - t0));
+        const t1 = performance.now();
+        const saved = await t.save();
+        saves.push(Math.round(performance.now() - t1));
+        expect(saved === text, 'the large file did not save byte-identical');
+        expect(await ev('__bmd.editor.parseReused'), 'the editor parsed the file a second time (editor/reuse-parse.js was not used)');
+      }
+      const median = (a) => a.slice().sort((x, y) => x - y)[1];
+      const open = median(opens), save = median(saves);
+      console.log(`    ${(text.length / 1e6).toFixed(2)} MB: open ${open} ms, save ${save} ms (median of ${opens.join(', ')} / ${saves.join(', ')})`);
+      expect(open <= 3000, `opening took ${open} ms (median of ${opens.join(', ')}; budget 3000 ms)`);
       expect(save <= 1000, `saving took ${save} ms (budget 1000 ms)`);
     },
 
@@ -544,6 +581,96 @@ export function feelChecks({ t, ev, send, expect, file, grip, FIXTURE, ROOT, WOR
       expect(!bad.length, bad.join('; '));
     },
 
+    /* ——— Caret ——— */
+    async 'caret'() {
+      const bad = [];
+      /** Photograph the caret's column a few times: a drawn caret blinks, so frames differ. */
+      const blinks = async (c) => {
+        // Screenshot coordinates ignore page zoom; the caret's are zoomed (devicePixelRatio
+        // is 1 here but for zoom, with the 1x metrics override).
+        const z = await ev('devicePixelRatio');
+        const clip = { x: Math.max(0, (c.x - 3) * z), y: Math.max(0, c.top * z), width: 7 * z, height: Math.max(4, c.h * z), scale: 1 };
+        const frames = new Set();
+        for (let i = 0; i < 7; i++) { frames.add((await send('Page.captureScreenshot', { format: 'png', clip })).data); await sleep(110); }
+        return frames.size > 1;
+      };
+      /** Check the caret where `place` left it, then type and see the letter land there. */
+      const at = async (label, place, { type = true } = {}) => {
+        try { await place(); } catch (e) { bad.push(`${label}: could not set up (${e.message})`); return; }
+        await sleep(150); await inject();
+        const c = await ev('__feel.caret()');
+        if (c.err) { bad.push(`${label}: ${c.err}`); return; }
+        const problems = [];
+        if (!c.onScreen) problems.push('off screen');
+        if (!c.within) problems.push('outside the text it belongs to');
+        if (c.covered) problems.push(`covered by ${c.covered}`);
+        if (c.h < c.font * 0.8 || c.h > Math.max(c.line, c.font * 1.6) + 2) problems.push(`${Math.round(c.h)} px tall for ${c.font} px text`);
+        const col = await ev(`__feel.rgba(${J(c.color)})`), bg = c.bg;
+        if (/transparent/.test(c.color) || col[3] === 0) problems.push('caret colour is transparent');
+        else {
+          const ratio = await ev(`(() => { const f = __feel.over(${J(col)}, ${J(bg)}); const [a, b] = [__feel.lum(f), __feel.lum(${J(bg)})].sort((p, q) => q - p); return (a + 0.05) / (b + 0.05); })()`);
+          if (ratio < 3) problems.push(`caret contrast ${ratio.toFixed(2)}:1 (needs 3:1)`);
+        }
+        if (!problems.length && !(await blinks(c))) problems.push('not drawn (no blinking caret on screen)');
+        if (type && !problems.length) {
+          // The caret shows where text goes: the next letter starts at its x.
+          await send('Input.insertText', { text: 'Z' }); await sleep(120);
+          const zx = await ev(`(() => { const s = getSelection(); const n = s.anchorNode; const o = s.anchorOffset; if (n.nodeType !== 3 || o < 1) return null; const r = document.createRange(); r.setStart(n, o - 1); r.setEnd(n, o); return r.getBoundingClientRect().left; })()`);
+          if (zx !== null && Math.abs(zx - c.x) > 3) problems.push(`text went in at x=${Math.round(zx)}, the caret was at x=${Math.round(c.x)}`);
+        }
+        if (problems.length) bad.push(`${label}: ${problems.join(', ')}`);
+      };
+      const clickEnd = async (sel, text) => {
+        const p = await ev(`(() => { const e = [...document.querySelectorAll(${J(sel)})].find((x) => x.textContent.includes(${J(text)}) && __parity.visible(x)); if (!e) return null; const r = document.createRange(); r.selectNodeContents(e); const b = [...r.getClientRects()].pop(); return { x: b.right + 3, y: b.top + b.height / 2 }; })()`);
+        if (!p) throw new Error(`no "${text}" in ${sel}`);
+        await t.click(p.x, p.y);
+      };
+      const MIX = '# Heading one\n\n## Heading two\n\nPlain words\n\n- bullet\n\n1. numbered\n\n- [ ] task\n\n> quote\n\n> [!NOTE]\n> callout body\n\n```js\nconst x = 1;\n```\n\n| A | B |\n| - | - |\n| cell | two |\n\nSome `code` and a [link](https://example.com) and $x^2$ end\n';
+      await at('empty document', async () => { await ev('__bmd.blank()'); await ev('__bmd.view().focus()'); });
+      // Without a click: after each way of getting a document, you can just type.
+      await at('right after launch', async () => { await ev(`localStorage.removeItem('bmd.lastFile')`); await t.reload(); await sleep(300); });
+      await at('after Ctrl+N', async () => { await t.open('x\n'); await t.key('Ctrl+N'); await sleep(300); });
+      await at('after Ctrl+O', async () => { const p = file('caret-open.md', 'opened file\n'); await t.open('x\n'); await t.stub({ pickOpenPath: J(p) }); await t.key('Ctrl+O'); await sleep(400); });
+      await at('after File ▸ Open Recent', async () => { const p = file('caret-recent.md', 'recent file\n'); await t.open('x\n'); await t.stub({ pickOpenPath: J(p) }); await t.key('Ctrl+O'); await sleep(300); await t.open('x\n'); await t.menu('File', 'Open Recent', 'caret-recent.md'); await sleep(300); });
+      await at('after dropping a .md file', async () => { const p = file('caret-drop.md', 'dropped file\n'); await t.open('x\n'); await ev(`__bmd.drop({ path: ${J(p)}, name: 'caret-drop.md' })`); await sleep(400); });
+      await at('end of a paragraph (click)', async () => { await t.open(MIX); await clickEnd('.ProseMirror p', 'Plain words'); });
+      await at('start of a paragraph (Home)', async () => { await t.open(MIX); await t.caret('Plain words'); await t.key('Home'); });
+      await at('middle of a word (←)', async () => { await t.open(MIX); await t.caret('Plain words'); await t.key('ArrowLeft'); await t.key('ArrowLeft'); });
+      await at('heading 1', async () => { await t.open(MIX); await clickEnd('.ProseMirror h1', 'Heading one'); });
+      await at('heading 2', async () => { await t.open(MIX); await t.caret('Heading two'); });
+      await at('bullet item', async () => { await t.open(MIX); await t.caret('bullet'); });
+      await at('start of a numbered item', async () => { await t.open(MIX); await t.caret('numbered', 'start'); });
+      await at('start of a task (beside the checkbox)', async () => { await t.open(MIX); await t.caret('task', 'start'); });
+      await at('start of a quote (beside its bar)', async () => { await t.open(MIX); await t.caret('quote', 'start'); });
+      await at('callout body', async () => { await t.open(MIX); await t.caret('callout body'); });
+      await at('code block', async () => { await t.open(MIX); await t.caret('const x = 1;'); });
+      await at('new line in a code block', async () => { await t.open(MIX); await t.caret('const x = 1;'); await t.key('Enter'); });
+      await at('table cell', async () => { await t.open(MIX); await t.caret('cell'); });
+      await at('right after inline code', async () => { await t.open(MIX); await t.caret(' and a ', 'start'); }, { type: false });
+      await at('right after a link', async () => { await t.open(MIX); await t.caret(' and ', 'start'); await ev(`(() => { const p = __parity.find(' and $'.slice(0, 5), 1); __parity.select(p); })()`).catch(() => {}); }, { type: false });
+      await at('after an equation', async () => { await t.open(MIX); await t.caret(' end', 'start'); });
+      await at('new empty line (Enter)', async () => { await t.open(MIX); await t.caret('Plain words'); await t.key('Enter'); });
+      await at('after Backspace joins two lines', async () => { await t.open('first\n\nsecond\n'); await t.caret('second', 'start'); await t.key('Backspace'); });
+      await at('after Esc closes the slash menu', async () => { await t.newLine(); await t.type('/'); await sleep(300); await t.key('Escape'); });
+      await at('after undo', async () => { await t.open('abc\n'); await t.caret('abc'); await t.type('d'); await t.key('Ctrl+Z'); });
+      await at('after Chinese input', async () => { await t.open('abc\n'); await t.caret('abc'); await ime('nihao', '你好'); });
+      await at('toggle title', async () => { await t.open('<details>\n<summary>Title</summary>\n\nbody\n\n</details>\n'); await clickEnd('.bmd-toggle-summary', 'Title'); });
+      await at('toggle body', async () => {
+        await t.open('<details>\n<summary>Title</summary>\n\nbody text\n\n</details>\n');
+        await ev(`(() => { const d = document.querySelector('.bmd-toggle'); if (d.dataset.open !== 'true') d.querySelector('.bmd-toggle-arrow').click(); })()`); await sleep(250);
+        await clickEnd('.bmd-toggle-body p', 'body text');
+      });
+      await at('column', async () => { await t.open('<div class="bmd-row">\n<div class="bmd-col">\n\nleft side\n\n</div>\n<div class="bmd-col">\n\nright side\n\n</div>\n</div>\n'); await sleep(250); await clickEnd('.bmd-column p', 'right side'); });
+      await at('zoomed in (Ctrl+=)', async () => { await t.open(MIX); await t.key('Ctrl+Equal'); await sleep(300); await t.caret('Plain words'); });
+      await t.key('Ctrl+0'); await sleep(300);
+      await send('Emulation.setDeviceMetricsOverride', { width: 1100, height: 800, deviceScaleFactor: 1, mobile: false });
+      await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] });
+      await at('dark mode', async () => { await t.open(MIX); await t.caret('Plain words'); });
+      await at('dark mode code block', async () => { await t.open(MIX); await t.caret('const x = 1;'); });
+      await send('Emulation.setEmulatedMedia', { features: [] });
+      expect(!bad.length, bad.join('; '));
+    },
+
     async 'ime-colon'() {
       // The owner's rule: the full-width ： (Chinese mode) never opens the emoji picker —
       // the keyboard is still in Chinese mode after it — while the ASCII : does.
@@ -706,9 +833,10 @@ export function feelChecks({ t, ev, send, expect, file, grip, FIXTURE, ROOT, WOR
   checks['visual-regression'].timeout = 120000;
   checks['memory'].timeout = 180000;
   checks['ime-enter'].timeout = 90000;
+  checks['caret'].timeout = 300000;
   checks['contrast'].timeout = 90000;
   checks['display-scaling'].timeout = 60000;
-  checks['large-file'].timeout = 60000;
+  checks['large-file'].timeout = 120000;
   checks['typing-latency'].timeout = 90000;
 
   const last = (a) => a[a.length - 1];

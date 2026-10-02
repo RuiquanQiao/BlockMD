@@ -213,7 +213,12 @@ body {
 
 /* ——— Editor typography ——— */
 .milkdown { outline: none; }
-.milkdown .ProseMirror { outline: none; }
+.milkdown .ProseMirror {
+  outline: none;
+  /* One caret colour everywhere, as Notion sets it. Left to inherit, the caret takes the
+     text's colour — red and 2.96:1 right after inline code, faint in a finished task. */
+  caret-color: var(--ink);
+}
 
 /* Every top-level node is a block: a hit area with its own padding, a 1px gap to the
    next one, and a positioning context for the hover handle.

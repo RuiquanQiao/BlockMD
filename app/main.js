@@ -253,6 +253,10 @@ async function load(source, name, path = null, { restored = false } = {}) {
 async function loadGuarded(source, name, path) {
   if (!(await confirmLeave())) return false;
   await load(source, name, path);
+  // Ready to type, as after launch and Ctrl+N — every way of opening a file (Ctrl+O,
+  // Open Recent, dropping one) comes through here. (A reload by the disk watcher
+  // doesn't, so it never pulls focus from, say, the find bar.)
+  view()?.focus();
   return true;
 }
 

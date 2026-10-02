@@ -160,12 +160,30 @@ for (let i = 0; i < 60; i++) {
   await sleep(1000);
 }
 await send('Emulation.setDeviceMetricsOverride', { width: 1100, height: 800, deviceScaleFactor: 1, mobile: false });
+// The page counts as focused whether or not its window is the active one: Windows draws
+// no caret (and no focus ring) in a background window, so a check's result would depend
+// on where the person at the computer last clicked.
+await send('Emulation.setFocusEmulationEnabled', { enabled: true });
 
 // No native dialog may open while checks run (platform.js `stub`): nothing can click
 // one, and the page freezes behind it. Also start from a clean slate — a leftover
 // draft or last-file would otherwise change what the app does on the next reload.
 const DEV_KEYS = ['bmd.draft', 'bmd.lastFile', 'bmd.devConfirm', 'bmd.devBlocked'];
 await ev(`(() => { localStorage.setItem('bmd.devNoDialogs', '1'); for (const k of ${J(DEV_KEYS)}) localStorage.removeItem(k); })()`);
+// Saved preferences too: this profile lives on between runs, and a zoom or page style
+// left behind by an interrupted check made later checks measure the wrong widths. They
+// are applied when the page loads, so reset → reload.
+const PREF_KEYS = ['bmd.zoom', 'bmd.pageStyle', 'bmd.recent'];
+if (await ev(`(() => { const had = ${J(PREF_KEYS)}.some((k) => localStorage.getItem(k) !== null); for (const k of ${J(PREF_KEYS)}) localStorage.removeItem(k); return had; })()`)) {
+  await ev('location.reload()').catch(() => {});
+  await sleep(1500);
+  for (let i = 0; i < 40 && !(await ev('typeof window.__bmd === "object" && !!window.__bmd.session').catch(() => false)); i++) await sleep(250);
+  await send('Emulation.setDeviceMetricsOverride', { width: 1100, height: 800, deviceScaleFactor: 1, mobile: false });
+  await send('Emulation.setFocusEmulationEnabled', { enabled: true });
+}
+// The window's zoom outlives a reload: back to 100 % the way a person would (Ctrl+0).
+for (const type of ['rawKeyDown', 'keyUp']) await send('Input.dispatchKeyEvent', { type, modifiers: 2, key: '0', code: 'Digit0', windowsVirtualKeyCode: 48 });
+await sleep(300);
 
 /** Helpers that run inside the page. */
 const PAGE_HELPERS = `window.__parity = {
@@ -280,6 +298,7 @@ const t = {
     await sleep(400);
     await ev(PAGE_HELPERS);
     await send('Emulation.setDeviceMetricsOverride', { width: 1100, height: 800, deviceScaleFactor: 1, mobile: false });
+    await send('Emulation.setFocusEmulationEnabled', { enabled: true });
   },
   /**
    * Answer native dialogs for the next steps (see platform.js `stub`), recording what
