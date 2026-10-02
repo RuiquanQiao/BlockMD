@@ -39,7 +39,21 @@ export const FEEL = `window.__feel = {
     return [e, ...[...e.children].slice(0, 4)].map(one).join('#');
   },
   focusSig(e) { const s = getComputedStyle(e); return [s.outlineStyle, s.outlineWidth, s.outlineColor, s.boxShadow, s.backgroundColor, s.borderTopColor].join('|'); },
-  pad(sel) { const e = [...document.querySelectorAll(sel)].find((x) => this.hittable(x) || getComputedStyle(x).visibility === 'visible'); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.left + 3, y: r.top + 3 }; },
+  // A spot in a menu that is no item: the middle of its top padding (a corner can lie
+  // outside the rounded edge — the pointer would leave the menu).
+  pad(sel) {
+    const e = [...document.querySelectorAll(sel)].find((x) => this.hittable(x) || getComputedStyle(x).visibility === 'visible');
+    if (!e) return null;
+    const r = e.getBoundingClientRect();
+    // Along the top edge, the first point that is the menu itself and no control in it.
+    for (let y = r.top + 2; y < r.top + 6; y += 1) {
+      for (let x = r.left + 14; x < r.right - 14; x += 3) {
+        const at = document.elementFromPoint(x, y);
+        if (at && e.contains(at) && !at.closest('button, input, [role="menuitem"], [role="option"], [role="listitem"]')) return { x, y };
+      }
+    }
+    return { x: r.left + r.width / 2, y: r.top + 2 };
+  },
   rect(sel) { const e = typeof sel === 'string' ? document.querySelector(sel) : sel; if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height, right: r.right, bottom: r.bottom }; },
   /**
    * Where the browser draws the caret, and what would hide it. In an empty block the
@@ -130,6 +144,14 @@ const NOTION_FAINT = [
 
 export function feelChecks({ t, ev, send, expect, file, grip, FIXTURE, ROOT, WORK, approve }) {
   const inject = () => ev(FEEL);
+  // A page with a table of contents (outline.js), and opening its card with the pointer.
+  const TOC_DOC = '# Alpha\n\nOne\n\n## Beta\n\nTwo\n\n### Gamma\n\nThree\n';
+  const openOutline = async () => {
+    await t.open(TOC_DOC); await sleep(400);
+    const d = await ev(`(() => { const r = document.querySelector('.bmd-outline-dashes').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+    await t.glide({ x: d.x - 150, y: d.y }, d, 6); await sleep(200);
+    await inject();
+  };
   const mouse = (x, y) => t.mouse('mouseMoved', x, y);
 
   /**
@@ -154,6 +176,11 @@ export function feelChecks({ t, ev, send, expect, file, grip, FIXTURE, ROOT, WOR
       // Already the highlighted row (the keyboard cursor starts on the first item): it is
       // lit, and pointing at it rightly changes nothing.
       const lit = ms === null && await ev(`__feel.els(${J(sel)})[${it.i}]?.matches('.is-active, .is-open, [aria-selected="true"]')`);
+      // Text must stay readable on the highlight (Notion-faint hints excepted).
+      if (!it.disabled && (ms !== null || lit)) {
+        const low = await ev(`(() => { const e = __feel.els(${J(sel)})[${it.i}]; return e ? __feel.texts(e, ${J(NOTION_FAINT)}).filter((x) => x.ratio < x.need && !x.hint).map((x) => x.text + ' ' + x.ratio + ':1') : []; })()`);
+        if (low.length) bad.push(`${surface} "${it.name}": hovered text ${low.join(', ')} (needs 4.5:1)`);
+      }
       if (it.disabled) { if (ms !== null) bad.push(`${surface} "${it.name}" is disabled but lights up`); }
       else if (ms === null && !lit) bad.push(`${surface} "${it.name}": no hover feedback`);
       else if (ms > 50) bad.push(`${surface} "${it.name}": hover feedback took ${ms} ms`);
@@ -274,6 +301,9 @@ export function feelChecks({ t, ev, send, expect, file, grip, FIXTURE, ROOT, WOR
         const s = await ev(`(() => { const r = __feel.rect('.bmd-toggle-head'); return { x: r.x + r.w - 20, y: r.y + r.h / 2 }; })()`);
         await t.hover(s.x, s.y);
         bad.push(...await sweep('Toggle', '.bmd-toggle-arrow', s)); }
+      // Table of contents card
+      { await openOutline();
+        bad.push(...await sweep('Table of contents', '.bmd-outline-item', await ev(`__feel.pad('.bmd-outline-card')`))); }
       expect(!bad.length, bad.join('; '));
     },
 
@@ -303,6 +333,11 @@ export function feelChecks({ t, ev, send, expect, file, grip, FIXTURE, ROOT, WOR
       await t.key('Escape');
       await t.select('world'); await t.key('Ctrl+K'); await sleep(200);
       await probe('Link box', '.bmd-link-editor input');
+      await t.key('Escape');
+      await t.open(TOC_DOC); await sleep(400);
+      await probe('Table of contents', '.bmd-outline-dashes');
+      await ev(`document.querySelector('.bmd-outline-dashes').focus()`); await sleep(200);
+      await probe('Table of contents', '.bmd-outline-item');
       await t.key('Escape');
       { const b = await centre('#btn-style'); await t.click(b.x, b.y); await probe('Page style menu', '.bmd-style-menu button'); await t.key('Escape'); }
       await openMenu();
@@ -699,6 +734,8 @@ export function feelChecks({ t, ev, send, expect, file, grip, FIXTURE, ROOT, WOR
         'block-menu': async () => { await t.open('first block\n\nsecond\n'); const g = await grip(0); await t.click(g.x, g.y); await sleep(250); },
         'toolbar': async () => { await t.open('hello world\n'); await t.select('world'); await sleep(300); },
         'find-replace': async () => { await t.open('cat and cat\n'); await t.caret('cat'); await t.key('Ctrl+H'); await t.type('cat'); },
+        // Opened from the keyboard, so it stays open while the pointer is parked.
+        'outline': async () => { await t.open(TOC_DOC); await sleep(400); await ev(`document.querySelector('.bmd-outline-dashes').focus()`); await sleep(300); },
         'narrow-window': async () => { await send('Emulation.setDeviceMetricsOverride', { width: 560, height: 420, deviceScaleFactor: 1, mobile: false }); await t.open(); await sleep(1000); },
       };
       const bad = [];
@@ -792,6 +829,7 @@ export function feelChecks({ t, ev, send, expect, file, grip, FIXTURE, ROOT, WOR
         await openMenu(); const s = await centre('.bmd-app-menu [data-section="File"]'); await t.hover(s.x, s.y); await scan(`${scheme} app menu`); await t.key('Escape');
         await t.newLine(); await t.type('/'); await sleep(300); await scan(`${scheme} slash menu`); await t.key('Escape');
         await t.open('hello world\n'); await t.caret('hello'); await t.key('Ctrl+H'); await scan(`${scheme} find bar`); await t.key('Escape');
+        await openOutline(); await scan(`${scheme} table of contents`);
       }
       await send('Emulation.setEmulatedMedia', { features: [] });
       // One line per distinct problem, not one per occurrence.
@@ -825,6 +863,7 @@ export function feelChecks({ t, ev, send, expect, file, grip, FIXTURE, ROOT, WOR
       await t.open('hello world\n'); await t.select('world'); await sleep(300); await scan('toolbar');
       await t.caret('hello'); await t.key('Ctrl+H'); await scan('find bar'); await t.key('Escape');
       await t.newLine(); await t.type(':smi'); await sleep(300); await scan('emoji picker'); await t.key('Escape');
+      await openOutline(); await scan('table of contents');
       const uniq = [...new Set(bad)];
       expect(!uniq.length, uniq.slice(0, 15).join('; '));
     },

@@ -1,6 +1,6 @@
 /**
  * Page style, as in Notion's "···" menu: font (Default / Serif / Mono), small text,
- * full width.
+ * full width, and whether the table of contents shows (outline.js).
  *
  * Notion stores these per page; a Markdown file has nowhere to keep them, so here they
  * are an app setting, remembered in this webview's local storage and applied as
@@ -9,7 +9,7 @@
  */
 
 const KEY = 'bmd.pageStyle';
-const DEFAULTS = { font: 'default', small: false, wide: false };
+const DEFAULTS = { font: 'default', small: false, wide: false, toc: true };
 
 function load() {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) ?? '{}') }; } catch { return { ...DEFAULTS }; }
@@ -36,6 +36,7 @@ export function setPageStyle(patch) {
   style = { ...style, ...patch };
   store(style);
   apply(style);
+  window.dispatchEvent(new Event('bmd-page-style'));
 }
 
 /** @param {HTMLButtonElement} button The "···" button in the top bar */
@@ -55,7 +56,7 @@ export function setUpPageStyle(button) {
         `<button type="button" class="bmd-style-font${style.font === id ? ' is-active' : ''}" data-font="${id}">` +
         `<span class="bmd-style-sample bmd-sample-${id}">${sample}</span><span>${label}</span></button>`).join('') +
       '</div>' +
-      toggle('small', 'Small text') + toggle('wide', 'Full width');
+      toggle('small', 'Small text') + toggle('wide', 'Full width') + toggle('toc', 'Table of contents');
   }
   const toggle = (id, label) =>
     `<button type="button" class="bmd-menu-item bmd-style-toggle" role="menuitemcheckbox" aria-checked="${style[id]}" data-toggle="${id}">` +

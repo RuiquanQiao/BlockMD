@@ -17,7 +17,7 @@
   --bg: #fff;
   --bg-sunken: #f7f6f3;          /* code blocks, front matter */
   --ink: #37352f;
-  --ink-2: rgba(55, 53, 47, 0.68); /* Notion's 0.65 is 4.19:1 on white; 0.68 reaches WCAG AA 4.5:1 */
+  --ink-2: rgba(55, 53, 47, 0.70); /* Notion's 0.65 is 4.19:1 on white; 0.70 keeps WCAG AA 4.5:1 on a hovered row too */
   --ink-3: rgba(55, 53, 47, 0.45);
   --rule: rgba(55, 53, 47, 0.09);
   --rule-strong: rgba(55, 53, 47, 0.16);
@@ -26,6 +26,7 @@
 
   --accent: #2383e2;
   --accent-soft: rgba(35, 131, 226, 0.12);
+  --accent-text: #1a6fc4; /* accent as text: #2383e2 is 3.88:1 on white; this is 5.1:1, and 4.59:1 on a hovered row */
   --select: rgba(35, 131, 226, 0.28);
 
   --code-ink: #eb5757;
@@ -57,7 +58,7 @@
     --bg: #191919;
     --bg-sunken: #252525;
     --ink: rgba(255, 255, 255, 0.81);
-    --ink-2: rgba(255, 255, 255, 0.46);
+    --ink-2: rgba(255, 255, 255, 0.48); /* Notion's 0.46 is 4.38:1 on a hovered row */
     --ink-3: rgba(255, 255, 255, 0.32);
     --rule: rgba(255, 255, 255, 0.13);
     --rule-strong: rgba(255, 255, 255, 0.2);
@@ -65,6 +66,7 @@
     --active: rgba(255, 255, 255, 0.08);
 
     --code-ink: #ff7369;
+    --accent-text: #529cca; /* Notion's dark-mode blue text, 5.9:1 on --bg */
     --warn: #dfab01;
     --danger: #ff7369;
     --danger-soft: rgba(255, 115, 105, 0.1);
@@ -130,7 +132,7 @@ body {
 }
 .btn:hover { background: var(--hover); }
 .btn:active { background: var(--active); }
-.btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-text); }
 .btn-primary {
   margin-left: 6px;
   padding: 6px 12px;
@@ -352,7 +354,7 @@ body {
 .milkdown dl[data-type="footnote_definition"] dd { margin: 0; }
 .milkdown dl[data-type="footnote_definition"] dd > * { margin: 0; padding: 0; }
 .milkdown sup[data-type="footnote_reference"] {
-  color: var(--accent);
+  color: var(--accent-text);
   font-size: 0.7em;
   padding: 0 1px;
   cursor: default;
@@ -586,7 +588,7 @@ body {
   border: 0; border-radius: 4px; background: none; color: var(--ink); cursor: pointer;
 }
 .bmd-toolbar button:hover { background: var(--hover); }
-.bmd-toolbar button.is-active { color: var(--accent); }
+.bmd-toolbar button.is-active { color: var(--accent-text); }
 
 /* Link editor (editor/link.js) */
 .bmd-link-editor { padding: 6px; width: 320px; }
@@ -731,9 +733,9 @@ body {
   font: inherit; font-size: 12px; color: var(--ink-2); border: 0; border-radius: 6px; background: none; cursor: pointer;
 }
 .bmd-style-font:hover { background: var(--hover); }
-.bmd-style-font.is-active { color: var(--accent); }
+.bmd-style-font.is-active { color: var(--accent-text); }
 .bmd-style-sample { font-size: 22px; line-height: 1.2; color: var(--ink); }
-.bmd-style-font.is-active .bmd-style-sample { color: var(--accent); }
+.bmd-style-font.is-active .bmd-style-sample { color: var(--accent-text); }
 .bmd-sample-serif { font-family: var(--font-serif); }
 .bmd-sample-mono { font-family: var(--font-mono); }
 .bmd-style-toggle { display: flex; justify-content: space-between; align-items: center; width: 100%; text-align: left; }
@@ -768,11 +770,47 @@ body {
 .bmd-app-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bmd-app-key { margin-left: 24px; font-size: 12px; color: var(--ink-3); white-space: nowrap; }
 .bmd-app-arrow { color: var(--ink-3); font-size: 16px; line-height: 1; }
-.bmd-app-check { width: 14px; color: var(--accent); flex: none; }
+.bmd-app-check { width: 14px; color: var(--accent-text); flex: none; }
 .bmd-app-sep { height: 1px; margin: 4px 6px; background: var(--rule); }
 .bmd-app-item.is-open,
 .bmd-app-item:not(:disabled):hover,
 .bmd-app-item:focus-visible { background: var(--hover); outline: none; }
+
+/* ——— Table of contents (outline.js): Notion's dashes on the right, a card on hover ——— */
+.bmd-outline { position: fixed; z-index: 30; display: flex; justify-content: flex-end; }
+.bmd-outline[hidden], .bmd-outline.no-room { display: none; }
+.bmd-outline-dashes {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
+  padding: 6px 2px; overflow: hidden; max-height: inherit; outline-offset: 4px; border-radius: 4px;
+}
+.bmd-outline-dash { height: 2px; border-radius: 1px; background: var(--rule-strong); flex: none; transition: background 0.12s; }
+.bmd-outline-dash.bmd-outline-h1 { width: 20px; }
+.bmd-outline-dash.bmd-outline-h2 { width: 15px; }
+.bmd-outline-dash.bmd-outline-h3 { width: 10px; }
+.bmd-outline-dash.is-active { background: var(--ink); }
+.bmd-outline-card {
+  position: absolute; top: -10px; right: -8px;
+  min-width: 200px; max-width: 280px; overflow-y: auto; /* max-height: outline.js, from the window */
+  padding: 12px 8px; background: var(--bg); border-radius: 12px;
+  box-shadow: rgba(15, 15, 15, 0.05) 0 0 0 1px, rgba(15, 15, 15, 0.1) 0 3px 6px, rgba(15, 15, 15, 0.2) 0 9px 24px;
+  visibility: hidden; opacity: 0; transform: translateX(4px);
+  transition: opacity 0.12s, transform 0.12s, visibility 0s linear 0.12s;
+}
+.bmd-outline.is-open .bmd-outline-card { visibility: visible; opacity: 1; transform: none; transition: opacity 0.12s, transform 0.12s; }
+.bmd-outline-item {
+  display: block; width: 100%; padding: 4px 10px; border: 0; border-radius: 6px;
+  background: none; text-align: left; font: inherit; font-size: 14px; line-height: 1.4;
+  color: var(--ink-2); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.bmd-outline-item.bmd-outline-h2 { padding-left: 22px; }
+.bmd-outline-item.bmd-outline-h3 { padding-left: 34px; }
+.bmd-outline-item:hover, .bmd-outline-item:focus-visible { background: var(--hover); outline: none; }
+.bmd-outline-item.is-active { color: var(--accent-text); }
+.bmd-outline-item.is-empty { font-style: italic; }
+/* Where a click in the outline lands: a brief highlight on the heading. */
+@keyframes bmd-outline-flash { from { background: var(--accent-soft); } to { background: transparent; } }
+.bmd-outline-flash { animation: bmd-outline-flash 1.2s ease-out; border-radius: 4px; }
+@media print { .bmd-outline { display: none !important; } }
 
 /* ——— Replace row in the find bar (editor/find.js) ——— */
 .bmd-find { flex-direction: column; align-items: stretch; gap: 4px; }

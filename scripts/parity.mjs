@@ -637,6 +637,82 @@ const checks = {
     await t.key('Backspace');
     expect((await t.save()) === 'b\n\nc\n\na\n\nd\n', 'Backspace did not delete both blocks: ' + J(await t.save()));
   },
+  async 'outline'() {
+    const filler = (n) => Array.from({ length: n }, (_, i) => `Paragraph ${i} of filler text that takes up a full line of the page.`).join('\n\n');
+    const md = `# Alpha\n\n${filler(12)}\n\n## Beta\n\n${filler(12)}\n\n### Gamma\n\n${filler(12)}\n\n#### Delta is H4\n\n- ## Nested in a list\n\n${filler(30)}\n`;
+    const state = () => ev(`(() => { const n = document.querySelector('.bmd-outline'); const shown = !!n && !n.hidden && getComputedStyle(n).display !== 'none';
+      return { shown, dashes: [...document.querySelectorAll('.bmd-outline-dash')].map((d) => ({ w: d.getBoundingClientRect().width, on: d.classList.contains('is-active') })),
+        items: [...document.querySelectorAll('.bmd-outline-item')].map((b) => ({ text: b.textContent, x: b.getBoundingClientRect().left + parseFloat(getComputedStyle(b).paddingLeft), on: b.classList.contains('is-active') })),
+        open: !!n?.classList.contains('is-open') && getComputedStyle(document.querySelector('.bmd-outline-card')).visibility === 'visible',
+        clear: n ? n.getBoundingClientRect().left >= document.querySelector('.ProseMirror').getBoundingClientRect().right : null }; })()`);
+    const pane = (js) => ev(`(() => { const p = document.querySelector('.pane-editor'); ${js} })()`);
+    // One heading: no outline (Notion shows it from two).
+    await t.open('# Only\n\ntext\n'); await sleep(300);
+    expect(!(await state()).shown, 'an outline shows for a page with one heading');
+    await t.open(md); await sleep(400);
+    let s = await state();
+    expect(s.shown, 'no outline for a page with three headings');
+    expect(s.dashes.length === 3, `${s.dashes.length} dashes for H1, H2, H3 (H4 and a heading inside a list are left out)`);
+    expect(s.dashes[0].w > s.dashes[1].w && s.dashes[1].w > s.dashes[2].w, 'dashes are not longer for higher headings: ' + J(s.dashes.map((d) => d.w)));
+    expect(s.clear, 'the outline covers the text');
+    expect(s.dashes[0].on && !s.dashes[1].on, 'at the top, the first dash is not the current one');
+    // Hover: the card lists the headings, indented by level.
+    const d = await ev(`(() => { const r = document.querySelector('.bmd-outline-dashes').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+    await t.glide({ x: d.x - 200, y: d.y }, d, 8);
+    s = await state();
+    expect(s.open, 'hovering the dashes did not open the card');
+    expect(J(s.items.map((i) => i.text)) === J(['Alpha', 'Beta', 'Gamma']), 'card lists ' + J(s.items.map((i) => i.text)));
+    expect(s.items[0].x < s.items[1].x && s.items[1].x < s.items[2].x, 'H2 and H3 are not indented');
+    // Click Gamma: the page scrolls to it, and it becomes the current section.
+    const g = await ev(`(() => { const b = [...document.querySelectorAll('.bmd-outline-item')].find((x) => x.textContent === 'Gamma'); const r = b.getBoundingClientRect(); return { x: r.left + 30, y: r.top + r.height / 2 }; })()`);
+    const sel0 = await ev('__bmd.view().state.selection.head');
+    await t.glide(d, g, 6); await t.click(g.x, g.y); await sleep(900);
+    const top = await ev(`(() => { const h = [...document.querySelectorAll('.ProseMirror h3')].find((x) => x.textContent === 'Gamma'); return h.getBoundingClientRect().top - document.querySelector('.pane-editor').getBoundingClientRect().top; })()`);
+    expect(top >= 0 && top <= 90, `Gamma is ${Math.round(top)} px from the top of the page after clicking it`);
+    s = await state();
+    expect(s.dashes[2].on && s.items[2].on, 'Gamma is not marked as the current section');
+    expect((await ev('__bmd.view().state.selection.head')) === sel0, 'clicking the outline moved the caret');
+    // Away: the card closes. Back to the top: the first section is current again.
+    await t.glide(g, { x: g.x - 400, y: g.y + 200 }, 6); await sleep(300);
+    expect(!(await state()).open, 'the card stayed open after the pointer left');
+    await pane('p.scrollTop = 0;'); await sleep(300);
+    expect((await state()).dashes[0].on, 'scrolling back up did not make the first section current');
+    // It follows edits: rename, add, remove.
+    await t.caret('Beta'); await t.type('2'); await sleep(500);
+    expect((await state()).items[1]?.text === 'Beta2', 'renaming a heading did not update the outline');
+    await t.caret('Paragraph 29'); await t.key('End'); await t.key('Enter'); await t.type('## Added'); await sleep(500);
+    expect((await state()).dashes.length === 4, 'a new heading did not appear in the outline');
+    // Keyboard: focus, arrows, Esc. From here on the document is the original again.
+    await t.open(md); await sleep(400);
+    await ev(`document.querySelector('.bmd-outline-dashes').focus()`); await sleep(200);
+    expect((await state()).open, 'focusing the outline did not open it');
+    await t.key('ArrowDown');
+    expect(await ev(`document.activeElement.classList.contains('bmd-outline-item')`), '↓ did not move into the list');
+    await t.key('Escape'); await sleep(200);
+    expect(!(await state()).open && (await ev('document.activeElement.classList.contains("ProseMirror")')), 'Esc did not close the outline and return to the text');
+    // Never over the text: at the narrowest window (it sits in the page margin there)
+    // and in full width; where there's no margin left it hides instead.
+    for (const width of [560, 760]) {
+      await send('Emulation.setDeviceMetricsOverride', { width, height: 800, deviceScaleFactor: 1, mobile: false }); await sleep(400);
+      const n = await state();
+      expect(!n.shown || n.clear, `at ${width} px the outline covers the text`);
+    }
+    await send('Emulation.setDeviceMetricsOverride', { width: 1100, height: 800, deviceScaleFactor: 1, mobile: false }); await sleep(400);
+    await ev(`(() => { document.documentElement.classList.add('style-wide'); window.dispatchEvent(new Event('bmd-page-style')); })()`); await sleep(400);
+    const wide = await state();
+    await ev(`(() => { document.documentElement.classList.remove('style-wide'); window.dispatchEvent(new Event('bmd-page-style')); })()`); await sleep(400);
+    expect(!wide.shown || wide.clear, 'in full width the outline covers the text');
+    expect((await state()).shown, 'the outline did not come back after full width');
+    // The ··· switch.
+    const style = await ev(`(() => { const r = document.querySelector('#btn-style').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+    const toggle = async () => { await t.click(style.x, style.y); const r = await ev(`(() => { const e = document.querySelector('[data-toggle="toc"]'); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`); expect(r, 'no Table of contents switch in the ··· menu'); await t.click(r.x, r.y); await t.key('Escape'); await sleep(300); };
+    await toggle();
+    expect(!(await state()).shown, '··· ▸ Table of contents did not hide the outline');
+    await toggle();
+    expect((await state()).shown, '··· ▸ Table of contents did not bring the outline back');
+    // Never touches the file.
+    expect((await t.save()) === md, 'the outline changed the saved file');
+  },
   async 'page-style'() {
     await t.open('Some text.\n');
     const centre = (sel) => ev(`(() => { const r = document.querySelector(${J(sel)}).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
@@ -888,6 +964,10 @@ const checks = {
     await t.open('Hello world, it’s me.\n\n你好世界\n');
     const words = await ev(`document.getElementById('stat-words').textContent`);
     expect(words === '8 words', 'word count: ' + J(words));
+    // Words in separate blocks are separate words (they were run together once).
+    await t.open('# Alpha\n\nOne\n\n- Two\n- Three\n');
+    const split = await ev(`document.getElementById('stat-words').textContent`);
+    expect(split === '4 words', 'word count across blocks: ' + J(split));
   },
   async 'links'() {
     const other = file('linked.md', '# Linked\n');

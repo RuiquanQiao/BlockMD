@@ -22,6 +22,7 @@ import * as platform from './platform.js';
 import { startUpdateChecks, checkForUpdatesNow } from './updater.js';
 import { setImageBase, insertImages, IMAGE_FILE } from './editor/image.js';
 import { setUpPageStyle, pageStyle, setPageStyle } from './page-style.js';
+import { setUpOutline } from './outline.js';
 import { setUpAppMenu } from './app-menu.js';
 import { openFind, openReplace } from './editor/find.js';
 import { copyAsMarkdown } from './editor/clipboard-extras.js';
@@ -124,8 +125,12 @@ function refresh() {
   const s = session.status();
 
   setWindowTitle();
-  const words = countWords(view()?.state.doc.textContent ?? '');
+  // Blocks separated by a space: textContent runs them together ("Alpha" + "One" was
+  // one word "AlphaOne").
+  const doc = view()?.state.doc;
+  const words = countWords(doc ? doc.textBetween(0, doc.content.size, ' ', ' ') : '');
   el.words.textContent = `${words} ${words === 1 ? 'word' : 'words'}`;
+  outline?.update();
 
   if (flashTimer) return;
 
@@ -478,6 +483,7 @@ setUpAppMenu(el.btnMenu, {
           'sep',
           { label: 'Small text', checked: s.small, run: () => setPageStyle({ small: !s.small }) },
           { label: 'Full width', checked: s.wide, run: () => setPageStyle({ wide: !s.wide }) },
+          { label: 'Table of contents', checked: s.toc !== false, run: () => setPageStyle({ toc: s.toc === false }) },
         ];
       },
     },
@@ -502,6 +508,7 @@ setUpAppMenu(el.btnMenu, {
 el.btnSource.addEventListener('click', toggleSource);
 el.btnOpen.addEventListener('click', openFile);
 setUpPageStyle(document.getElementById('btn-style'));
+const outline = setUpOutline({ pane: document.querySelector('.pane-editor'), getView: () => view() });
 el.btnSave.addEventListener('click', () => saveFile());
 
 el.fileInput.addEventListener('change', async (e) => {
