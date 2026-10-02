@@ -69,8 +69,16 @@ else if (!parity.allPass) problems.push(`npm run parity failed on this commit: $
 // 3. After publishing: the website deployed from the release, and the manifest is live.
 if (flags.includes('--published')) {
   const version = tag.replace(/^v/, '');
-  const pages = JSON.parse(gh('run', 'list', '--repo', repo, '--workflow', 'pages.yml', '--event', 'release', '--limit', '5', '--json', 'conclusion,status,displayTitle'));
-  const deploy = pages.find((p) => p.displayTitle.includes(tag));
+  // The website deploy starts only once the release is published: with --wait, wait for
+  // it to appear and finish (v0.1.8's check looked while it was still running).
+  let deploy;
+  for (let i = 0; ; i++) {
+    const pages = JSON.parse(gh('run', 'list', '--repo', repo, '--workflow', 'pages.yml', '--event', 'release', '--limit', '5', '--json', 'conclusion,status,displayTitle'));
+    deploy = pages.find((p) => p.displayTitle.includes(tag));
+    if ((deploy && deploy.status === 'completed') || !flags.includes('--wait') || i > 40) break;
+    console.log(`waiting for the website deploy (${deploy?.status ?? 'not started'})`);
+    await sleep(15000);
+  }
   if (!deploy) problems.push('no website deploy for this release');
   else if (deploy.conclusion !== 'success') problems.push(`website deploy: ${deploy.status} ${deploy.conclusion ?? ''}`);
   const live = await (await fetch(`https://github.com/${repo}/releases/latest/download/latest.json`)).json().catch(() => null);
