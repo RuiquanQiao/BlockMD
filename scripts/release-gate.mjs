@@ -39,8 +39,12 @@ async function checkRuns() {
   for (let i = 0; ; i++) {
     const runs = JSON.parse(gh('api', `repos/${repo}/commits/${sha}/check-runs?per_page=100`)).check_runs;
     const pending = runs.filter((r) => r.status !== 'completed');
-    if (!pending.length || !flags.includes('--wait') || i > 120) return runs;
-    console.log(`waiting for ${pending.length} check(s): ${pending.map((r) => r.name).join(', ')}`);
+    // A required check that hasn't appeared yet is pending too, not missing: runs show up
+    // seconds after the tag is pushed, and the manifest job only once the builds are done.
+    // (v0.1.8's first gate looked before any had appeared and gave up.)
+    const notYet = REQUIRED.filter(([p]) => !runs.some((r) => p.test(r.name))).map(([, what]) => what);
+    if ((!pending.length && !notYet.length) || !flags.includes('--wait') || i > 120) return runs;
+    console.log(`waiting for ${pending.length + notYet.length} check(s): ${[...pending.map((r) => r.name), ...notYet.map((w) => `${w} (not started)`)].join(', ')}`);
     await sleep(30000);
   }
 }
